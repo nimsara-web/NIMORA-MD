@@ -38,7 +38,8 @@ const CATEGORIES = {
             'report', 'quote', 'alljid', 'restart', 'join', 'about', 'theme',
             'addseedr', 'addcmd', 'getcmd', 'delcmd', 'resetcmd', 'eval',
             'setup', 'tgauth', 'tgconfig',
-            'vvsave', 'vvsaveauto'
+            'vvsave', 'vvsaveauto',
+            'setbotname', 'delbotname'
         ]
     },
     3: {
@@ -49,7 +50,7 @@ const CATEGORIES = {
             'dictionary', 'readmore', 'device', 'newgroup', 'delgroup',
             'save', 'block', 'unblock', 'help', 'id', 'settings', 'apply',
             'defaultimg', 'defaultfooter', 'list', 'menu', 'alive', 'jid',
-            'system', 'ping'
+            'system', 'ping', 'whoami'
         ]
     },
     4: {
