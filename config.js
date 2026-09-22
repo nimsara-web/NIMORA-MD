@@ -21,8 +21,8 @@ module.exports = {
     // ==========================================
     botName: process.env.BOT_NAME || 'NIMORA MD',
     botImageUrl: process.env.BOT_IMAGE_URL || 'https://raw.githubusercontent.com/nimsara-web/Im-Nim/refs/heads/main/Nimoradata/WhatsApp%20Image%202026-09-23%20at%201.57.30%20AM.jpeg',
-    botAudioUrl: process.env.BOT_AUDIO_URL || 'https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Data/welcome%20nim%20new.MP3',
-    websiteLogoUrl: process.env.WEBSITE_LOGO_URL || 'https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Data/Nim-Bot-New-Logo.jfif',
+    botAudioUrl: process.env.BOT_AUDIO_URL || 'https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Nimoradata/0923.MP3',
+    websiteLogoUrl: process.env.WEBSITE_LOGO_URL || 'https://raw.githubusercontent.com/nimsara-web/Im-Nim/refs/heads/main/Nimoradata/WhatsApp%20Image%202026-09-23%20at%201.57.30%20AM.jpeg',
 
     // ==========================================
     // 📢 WHATSAPP CHANNEL
