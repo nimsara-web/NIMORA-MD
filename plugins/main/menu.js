@@ -5,6 +5,13 @@
 
 const config = require('../../config');
 
+// ==========================================
+// 📦 LAZY REQUIRE HELPERS (avoid circular dependency)
+// ==========================================
+function getPairModule() {
+    return require('../../pair');
+}
+
 // Category definitions (1-12)
 const CATEGORIES = {
     1: {
@@ -106,7 +113,10 @@ const CATEGORIES = {
     }
 };
 
-// Build a category menu text
+// ==========================================
+// 🎨 MENU BUILDERS
+// ==========================================
+
 function buildCategoryMenu(num) {
     const cat = CATEGORIES[num];
     if (!cat) return null;
@@ -120,7 +130,6 @@ function buildCategoryMenu(num) {
     return text;
 }
 
-// Build main menu
 function buildMainMenu(botName, activeCount, followStatus) {
     let text = `
 *👋 ${botName.toUpperCase()} 🥷🏻*
@@ -165,6 +174,10 @@ function buildMainMenu(botName, activeCount, followStatus) {
     return text.trim();
 }
 
+// ==========================================
+// 🎯 MENU COMMAND
+// ==========================================
+
 module.exports = {
     name: 'menu',
     aliases: ['allmenu', 'help'],
@@ -179,7 +192,7 @@ module.exports = {
 
         const menuText = buildMainMenu(botName, activeSockets.size, followStatus);
 
-        // Send with bot image
+        // Send with bot image, fallback to text
         let sentMsg;
         try {
             sentMsg = await socket.sendMessage(sender, {
@@ -188,7 +201,6 @@ module.exports = {
                 contextInfo: channelContext
             }, { quoted: msg });
         } catch (e) {
-            // Fallback: text only
             sentMsg = await socket.sendMessage(sender, {
                 text: menuText,
                 contextInfo: channelContext
@@ -198,14 +210,15 @@ module.exports = {
         // Track menu message for reply-by-number
         if (sentMsg?.key?.id) {
             menuMessageIds.set(sentMsg.key.id, { type: 'main', timestamp: Date.now() });
-            // Cleanup old entries
+
+            // Cleanup old entries (keep last 100)
             if (menuMessageIds.size > 100) {
                 const oldest = menuMessageIds.keys().next().value;
                 menuMessageIds.delete(oldest);
             }
         }
 
-        // Send audio (welcome sound)
+        // Send welcome audio
         await ctx.delay(1500);
         try {
             if (config.botAudioUrl) {
@@ -221,9 +234,14 @@ module.exports = {
 
     /**
      * Handle reply-by-number (called from pair.js)
+     * User replies with 1-12 to a menu message
      */
     async handleReply(num, socket, msg, number, reply) {
-        const { menuMessageIds, channelContext, FOOTER } = require('../../pair');
+        // 🔑 Lazy require to avoid circular dependency
+        const pair = getPairModule();
+        const menuMessageIds = pair.menuMessageIds;
+        const channelContext = pair.getChannelContext();
+        const FOOTER = pair.FOOTER;
 
         const cat = CATEGORIES[num];
         if (!cat) return;
@@ -237,16 +255,32 @@ module.exports = {
         }, { quoted: msg });
 
         if (sentMsg?.key?.id) {
-            menuMessageIds.set(sentMsg.key.id, { type: 'category', num, timestamp: Date.now() });
+            menuMessageIds.set(sentMsg.key.id, {
+                type: 'category',
+                num,
+                timestamp: Date.now()
+            });
+
+            // Cleanup
+            if (menuMessageIds.size > 100) {
+                const oldest = menuMessageIds.keys().next().value;
+                menuMessageIds.delete(oldest);
+            }
         }
     },
 
     /**
-     * Handle "0" reply (back to main menu)
+     * Handle "0" reply → back to main menu
      */
     async handleBack(socket, msg, number, reply) {
-        const botName = (await require('../../configdb').get('BOT_NAME', number)) || config.botName;
-        const { activeSockets, menuMessageIds, channelContext } = require('../../pair');
+        // 🔑 Lazy require to avoid circular dependency
+        const pair = getPairModule();
+        const activeSockets = pair.activeSockets;
+        const menuMessageIds = pair.menuMessageIds;
+        const channelContext = pair.getChannelContext();
+
+        const { get } = require('../../configdb');
+        const botName = (await get('BOT_NAME', number)) || config.botName;
         const menuText = buildMainMenu(botName, activeSockets.size, '✅ Connected');
 
         let sentMsg;
@@ -264,10 +298,24 @@ module.exports = {
         }
 
         if (sentMsg?.key?.id) {
-            menuMessageIds.set(sentMsg.key.id, { type: 'main', timestamp: Date.now() });
+            menuMessageIds.set(sentMsg.key.id, {
+                type: 'main',
+                timestamp: Date.now()
+            });
+
+            // Cleanup
+            if (menuMessageIds.size > 100) {
+                const oldest = menuMessageIds.keys().next().value;
+                menuMessageIds.delete(oldest);
+            }
         }
-    }
+    },
+
+    // Export for other plugins
+    CATEGORIES,
+    buildCategoryMenu,
+    buildMainMenu
 };
 
-// Export categories for other plugins
+// Export categories separately for plugins that import menu.js
 module.exports.CATEGORIES = CATEGORIES;
