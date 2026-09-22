@@ -1,20 +1,23 @@
 /**
- * NIMORA MD - View Once to Owner
+ * NIMORA MD - View Once to Owner (Self-Chat)
  * Category: main
  */
 
 const pino = require('pino');
 const { downloadMediaMessage } = require('baileys');
-const config = require('../../config');
 
 module.exports = {
     name: 'vvp',
     aliases: ['vvowner', 'sendowner'],
     category: 'main',
-    description: 'Send view-once media to owner',
+    description: 'Send view-once media to bot self-chat',
 
     async execute(ctx) {
-        const { socket, msg, reply, sender, number, senderNumber, unwrapMessage, getMediaType, channelContext, FOOTER } = ctx;
+        const {
+            socket, msg, reply, sender, number, senderNumber,
+            unwrapMessage, getMediaType, get, input,
+            channelContext, FOOTER
+        } = ctx;
 
         // ==========================================
         // 1. Get quoted message
@@ -50,7 +53,7 @@ module.exports = {
         // 4. Download
         // ==========================================
         try {
-            await reply(`⏳ *Sending to owner privately...*${FOOTER}`);
+            await reply(`⏳ *Sending to your self-chat privately...*${FOOTER}`);
 
             const downloadTarget = {
                 key: {
@@ -58,9 +61,7 @@ module.exports = {
                     id: quoted.stanzaId,
                     participant: quoted.participant
                 },
-                message: {
-                    [messageType]: mediaData
-                }
+                message: { [messageType]: mediaData }
             };
 
             const buffer = await downloadMediaMessage(
@@ -75,10 +76,10 @@ module.exports = {
             }
 
             // ==========================================
-            // 5. Send to owner
+            // 5. 🔑 KEY FIX: Send to BOT'S OWN number
             // ==========================================
-            const ownerNumber = await ctx.get('OWNER_NUMBER', number) || config.ownerNumber;
-            const ownerJid = `${ownerNumber}@s.whatsapp.net`;
+            // selfJid = bot's own number (the bot that received the message)
+            const selfJid = `${number}@s.whatsapp.net`;
 
             const caption = `📥 *VIEW ONCE RECEIVED*
 
@@ -88,14 +89,14 @@ module.exports = {
 💬 *Caption:* ${mediaData?.caption || 'None'}${FOOTER}`;
 
             if (messageType === 'imageMessage') {
-                await socket.sendMessage(ownerJid, {
+                await socket.sendMessage(selfJid, {
                     image: buffer,
                     caption,
                     mentions: [quoted.participant || sender],
                     contextInfo: channelContext
                 });
             } else {
-                await socket.sendMessage(ownerJid, {
+                await socket.sendMessage(selfJid, {
                     video: buffer,
                     caption,
                     mentions: [quoted.participant || sender],
@@ -103,7 +104,9 @@ module.exports = {
                 });
             }
 
-            await reply(`✅ *Sent to owner (+${ownerNumber}) privately!*${FOOTER}`);
+            console.log(`[VVP] ✅ Sent to self-chat: ${selfJid}`);
+
+            await reply(`✅ *Sent to your self-chat (+${number}) privately!*${FOOTER}`);
 
         } catch (err) {
             console.error('[VVP] Error:', err);
