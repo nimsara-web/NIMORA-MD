@@ -1,0 +1,42 @@
+{
+  "name": "nimora-md",
+  "version": "1.0.0",
+  "description": "NIMORA MD - Professional WhatsApp Multi-Device Bot by Nimsara",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "build": "npm install && apt-get update && apt-get install -y python3 python3-pip ffmpeg && pip3 install yt-dlp"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.13.5",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "api-nexray": "^1.0.3",
+    "axios": "^1.7.2",
+    "baileys": "github:itsliaaa/baileys",
+    "body-parser": "^1.20.2",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "file-type": "^19.0.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "form-data": "^4.0.0",
+    "fs-extra": "^11.2.0",
+    "jimp": "^0.22.12",
+    "mongoose": "^8.4.0",
+    "node-fetch": "^3.3.2",
+    "pino": "^8.20.0",
+    "qrcode": "^1.5.3",
+    "sharp": "^0.33.4",
+    "yt-search": "^2.10.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Nimsara",
+  "license": "MIT"
+}
