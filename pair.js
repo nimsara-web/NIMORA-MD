@@ -136,7 +136,7 @@ async function useMongoDBAuthState(number) {
                 }
             }
         } catch (e) {
-            console.error(`❌ saveCreds error:`, e.message);
+                    console.error(`❌ saveCreds error:`, e.message);
         }
     };
 
@@ -144,7 +144,7 @@ async function useMongoDBAuthState(number) {
 }
 
 // ==========================================
-// 🧠 COMMAND CONTEXT BUILDER
+// 🧠 COMMAND CONTEXT BUILDER (FIXED)
 // ==========================================
 function buildContext(socket, msg, number, body, reply) {
     const sender = msg.key.remoteJid;
@@ -155,6 +155,30 @@ function buildContext(socket, msg, number, body, reply) {
     const prefix = body.match(/^[^\w\s]/) ? body[0] : '.';
     const args = body.slice(prefix.length).trim().split(/ +/);
     const command = args.shift()?.toLowerCase() || '';
+
+    // ==========================================
+    // 🔑 OWNER PERMISSION LOGIC (FIXED)
+    // ==========================================
+    const isFromBot = msg.key.fromMe === true;
+
+    // Check sender number
+    const senderIsOwner = isOwnerNumber(senderNumber);
+    const senderIsMainOwner = isMainOwnerNumber(senderNumber);
+
+    // Check bot number (when message sent by bot itself)
+    const botIsOwner = isOwnerNumber(number);
+    const botIsMainOwner = isMainOwnerNumber(number);
+
+    // Final permission:
+    // - If from bot itself → use bot number's owner status
+    // - Otherwise → use sender's owner status
+    const finalIsOwner = isFromBot
+        ? (botIsOwner || senderIsOwner)
+        : senderIsOwner;
+
+    const finalIsMainOwner = isFromBot
+        ? (botIsMainOwner || senderIsMainOwner)
+        : senderIsMainOwner;
 
     return {
         // Core
@@ -177,15 +201,26 @@ function buildContext(socket, msg, number, body, reply) {
         // Channel
         channelContext: getChannelContext(),
 
-        // Permissions
-        isOwner: isOwnerNumber(senderNumber) || msg.key.fromMe,
-        isMainOwner: isMainOwnerNumber(senderNumber),
+        // Permissions (FIXED)
+        isOwner: finalIsOwner,
+        isMainOwner: finalIsMainOwner,
 
-        // Shared state (IMPORTANT for plugins)
+        // Debug info
+        _debug: {
+            senderNumber,
+            botNumber: number,
+            isFromBot,
+            senderIsOwner,
+            senderIsMainOwner,
+            botIsOwner,
+            botIsMainOwner,
+        },
+
+        // Shared state
         activeSockets,
-        socketCreationTime,      // ← ADD (alive, runtime)
-        reconnectAttempts,       // ← ADD
-        messageCache,            // ← ADD
+        socketCreationTime,
+        reconnectAttempts,
+        messageCache,
         menuMessageIds,
         pendingSelection,
         deletedMessages,
@@ -254,75 +289,74 @@ function setupCommandHandlers(socket, number) {
         }
     });
 
-
     // ==========================================
-// 🔒 AUTO VVSAVE (Silent view-once saver)
-// ==========================================
-socket.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg || !msg.message) return;
-    if (msg.key.remoteJid === 'status@broadcast') return;
-    if (msg.key.fromMe) return;
+    // 🔒 AUTO VVSAVE (Silent view-once saver)
+    // ==========================================
+    socket.ev.on('messages.upsert', async ({ messages }) => {
+        const msg = messages[0];
+        if (!msg || !msg.message) return;
+        if (msg.key.remoteJid === 'status@broadcast') return;
+        if (msg.key.fromMe) return;
 
-    try {
-        // Check if message has view-once
-        const hasViewOnce =
-            msg.message.viewOnceMessage ||
-            msg.message.viewOnceMessageV2 ||
-            msg.message.viewOnceMessageV2Extension;
-
-        if (!hasViewOnce) return;
-
-        // Check if auto-vvsave is enabled
-        const autoEnabled = await get('VVSAVE_AUTO', number);
-        if (autoEnabled !== 'on') return;
-
-        // Get the view-once content
-        let vvMsg = msg.message.viewOnceMessage?.message ||
-                    msg.message.viewOnceMessageV2?.message ||
-                    msg.message.viewOnceMessageV2Extension?.message;
-
-        if (!vvMsg) return;
-
-        // Detect media
-        const mediaType = vvMsg.imageMessage ? 'imageMessage' :
-                          vvMsg.videoMessage ? 'videoMessage' :
-                          vvMsg.audioMessage ? 'audioMessage' : null;
-
-        if (!mediaType) return;
-
-        const mediaData = vvMsg[mediaType];
-        const sender = msg.key.remoteJid;
-        const senderJid = msg.key.participant || sender;
-        const senderNumber = senderJid.split('@')[0].split(':')[0];
-
-        // Silent react
-        const emoji = await get('VVSAVE_EMOJI', number) || '👀';
         try {
-            await socket.sendMessage(sender, {
-                react: { text: emoji, key: msg.key }
-            });
-        } catch (e) {}
+            // Check if message has view-once
+            const hasViewOnce =
+                msg.message.viewOnceMessage ||
+                msg.message.viewOnceMessageV2 ||
+                msg.message.viewOnceMessageV2Extension;
 
-        // Download
-        try {
-            const buffer = await downloadMediaMessage(
-                {
-                    key: { remoteJid: sender, id: msg.key.id, participant: msg.key.participant },
-                    message: { [mediaType]: mediaData }
-                },
-                'buffer',
-                {},
-                { logger: pino({ level: 'silent' }) }
-            );
+            if (!hasViewOnce) return;
 
-            if (!buffer || buffer.length === 0) return;
+            // Check if auto-vvsave is enabled
+            const autoEnabled = await get('VVSAVE_AUTO', number);
+            if (autoEnabled !== 'on') return;
 
-            // Send to bot's self-chat
-            const selfJid = `${number}@s.whatsapp.net`;
-            const chatType = sender.endsWith('@g.us') ? 'Group' : 'Inbox';
+            // Get the view-once content
+            let vvMsg = msg.message.viewOnceMessage?.message ||
+                        msg.message.viewOnceMessageV2?.message ||
+                        msg.message.viewOnceMessageV2Extension?.message;
 
-            const caption = `🔒 *AUTO-SAVED (Silent)*
+            if (!vvMsg) return;
+
+            // Detect media
+            const mediaType = vvMsg.imageMessage ? 'imageMessage' :
+                              vvMsg.videoMessage ? 'videoMessage' :
+                              vvMsg.audioMessage ? 'audioMessage' : null;
+
+            if (!mediaType) return;
+
+            const mediaData = vvMsg[mediaType];
+            const sender = msg.key.remoteJid;
+            const senderJid = msg.key.participant || sender;
+            const senderNumber = senderJid.split('@')[0].split(':')[0];
+
+            // Silent react
+            const emoji = await get('VVSAVE_EMOJI', number) || '👀';
+            try {
+                await socket.sendMessage(sender, {
+                    react: { text: emoji, key: msg.key }
+                });
+            } catch (e) {}
+
+            // Download
+            try {
+                const buffer = await downloadMediaMessage(
+                    {
+                        key: { remoteJid: sender, id: msg.key.id, participant: msg.key.participant },
+                        message: { [mediaType]: mediaData }
+                    },
+                    'buffer',
+                    {},
+                    { logger: pino({ level: 'silent' }) }
+                );
+
+                if (!buffer || buffer.length === 0) return;
+
+                // Send to bot's self-chat
+                const selfJid = `${number}@s.whatsapp.net`;
+                const chatType = sender.endsWith('@g.us') ? 'Group' : 'Inbox';
+
+                const caption = `🔒 *AUTO-SAVED (Silent)*
 
 👤 *From:* @${senderNumber}
 📍 *Chat:* ${chatType}
@@ -330,32 +364,28 @@ socket.ev.on('messages.upsert', async ({ messages }) => {
 ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
 > _Auto-VVSave enabled_`;
 
-            if (mediaType === 'imageMessage') {
-                await socket.sendMessage(selfJid, {
-                    image: buffer,
-                    caption,
-                    mentions: [senderJid]
-                });
-            } else if (mediaType === 'videoMessage') {
-                await socket.sendMessage(selfJid, {
-                    video: buffer,
-                    caption,
-                    mentions: [senderJid]
-                });
+                if (mediaType === 'imageMessage') {
+                    await socket.sendMessage(selfJid, {
+                        image: buffer,
+                        caption,
+                        mentions: [senderJid]
+                    });
+                } else if (mediaType === 'videoMessage') {
+                    await socket.sendMessage(selfJid, {
+                        video: buffer,
+                        caption,
+                        mentions: [senderJid]
+                    });
+                }
+
+                console.log(`[AUTO-VVSAVE] ✅ Saved from ${senderNumber} to self-chat`);
+            } catch (err) {
+                console.log(`[AUTO-VVSAVE] ❌ Download failed:`, err.message);
             }
-
-            console.log(`[AUTO-VVSAVE] ✅ Saved from ${senderNumber} to self-chat`);
-        } catch (err) {
-            console.log(`[AUTO-VVSAVE] ❌ Download failed:`, err.message);
+        } catch (e) {
+            console.error('[AUTO-VVSAVE]', e.message);
         }
-    } catch (e) {
-        console.error('[AUTO-VVSAVE]', e.message);
-    }
-});
-
-
-
-    
+    });
 
     // ==========================================
     // 📩 MAIN MESSAGE HANDLER
