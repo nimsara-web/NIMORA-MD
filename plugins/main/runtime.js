@@ -1,5 +1,10 @@
 const config = require('../../config');
 
+// Lazy require to avoid circular dependency
+function getPair() {
+    return require('../../pair');
+}
+
 module.exports = {
     name: 'runtime',
     aliases: ['uptime'],
@@ -7,7 +12,11 @@ module.exports = {
     description: 'Bot uptime',
 
     async execute(ctx) {
-        const { number, socketCreationTime, reply, FOOTER } = ctx;
+        const { number, reply, FOOTER } = ctx;
+
+        // ✅ Get socketCreationTime directly from pair module
+        const pair = getPair();
+        const socketCreationTime = pair.socketCreationTime || new Map();
 
         const botName = (await ctx.get('BOT_NAME', number)) || config.botName;
         const start = socketCreationTime.get(number) || Date.now();
