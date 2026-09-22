@@ -300,6 +300,17 @@ function setupCommandHandlers(socket, number) {
             quotedText.includes('𝗠𝗔𝗜𝗡 𝗠𝗘𝗡𝗨') ||
             (quotedText.includes('1️⃣') && quotedText.includes('2️⃣'));
 
+        // Handle "0" → back to main menu
+if (!body.startsWith(prefix) && body === '0' && isMenuReply) {
+    const menuCmd = getCommand('menu');
+    if (menuCmd && typeof menuCmd.handleBack === 'function') {
+        await menuCmd.handleBack(socket, msg, number, reply);
+        return;
+    }
+}
+
+        
+
         if (!body.startsWith(prefix) && body.match(/^([1-9]|1[0-2])$/) && isMenuReply) {
             const menuCmd = getCommand('menu');
             if (menuCmd && typeof menuCmd.handleReply === 'function') {
@@ -326,6 +337,64 @@ function setupCommandHandlers(socket, number) {
                 return;
             }
         }
+
+
+        
+
+        // ==========================================
+// 🤖 AUTO-REPLY (custom replies + basic)
+// ==========================================
+if (!msg.key.fromMe) {
+    try {
+        const autoReplyMode = await get('AUTOREPLY_MODE', number);
+
+        if (autoReplyMode && autoReplyMode !== 'off') {
+            const isGroup = sender.endsWith('@g.us');
+            const shouldReply =
+                autoReplyMode === 'all' ||
+                (autoReplyMode === 'inbox' && !isGroup) ||
+                (autoReplyMode === 'group' && isGroup);
+
+            if (shouldReply) {
+                const textLower = body.toLowerCase().trim();
+
+                // Check custom replies
+                const savedList = await get('AUTOREPLY_LIST', number);
+                let customReplies = {};
+                try { customReplies = savedList ? JSON.parse(savedList) : {}; } catch (e) {}
+
+                if (customReplies[textLower]) {
+                    await reply(customReplies[textLower] + FOOTER);
+                    return;
+                }
+
+                // Built-in greetings
+                const words = textLower.split(/\s+/);
+                const hasWord = w => words.includes(w);
+
+                if (hasWord('hi') || hasWord('hello') || hasWord('හායි')) {
+                    await reply('Hi! 👋' + FOOTER);
+                } else if (hasWord('gm') || textLower === 'good morning') {
+                    await reply('Good Morning 🌝' + FOOTER);
+                } else if (hasWord('gn') || textLower === 'good night') {
+                    await reply('Good Night ✨' + FOOTER);
+                } else if (hasWord('bye')) {
+                    await reply('Bye 🍻' + FOOTER);
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[AUTO-REPLY]', e.message);
+    }
+}
+
+
+
+
+
+
+
+        
 
         // ==========================================
         // 🚀 COMMAND EXECUTION
