@@ -157,22 +157,40 @@ function buildContext(socket, msg, number, body, reply) {
     const command = args.shift()?.toLowerCase() || '';
 
     return {
+        // Core
         socket, msg, number, body, reply,
         sender, senderJid, senderNumber, isGroup,
         prefix, args, command,
+
+        // Config & Constants
         config,
         FOOTER,
+
+        // Database
         Session,
         get, input, handleSettingUpdate,
+
+        // Message helpers
         getMessageBody, unwrapMessage, getMediaType,
         downloadMediaMessage,
+
+        // Channel
         channelContext: getChannelContext(),
+
+        // Permissions
         isOwner: isOwnerNumber(senderNumber) || msg.key.fromMe,
         isMainOwner: isMainOwnerNumber(senderNumber),
+
+        // Shared state (IMPORTANT for plugins)
         activeSockets,
+        socketCreationTime,      // ← ADD (alive, runtime)
+        reconnectAttempts,       // ← ADD
+        messageCache,            // ← ADD
         menuMessageIds,
         pendingSelection,
         deletedMessages,
+
+        // Helpers
         delay,
         humanDelay,
     };
@@ -291,13 +309,9 @@ function setupCommandHandlers(socket, number) {
         // ==========================================
         // ⏳ PENDING SELECTION HANDLER (CHECK FIRST!)
         // ==========================================
-        // This MUST come before menu reply check.
-        // .song, .movie, .video etc. use the SAME numbers (1, 2, 3)
-        // If pending exists → handle that, DON'T treat as menu.
         if (pendingSelection.has(sender)) {
             const pending = pendingSelection.get(sender);
 
-            // Valid selection: 1-9, within 2 minutes
             if (Date.now() - pending.timestamp < 120000 && /^[1-9]$/.test(trimmedBody)) {
                 pendingSelection.delete(sender);
 
@@ -310,9 +324,8 @@ function setupCommandHandlers(socket, number) {
                         await reply(`❌ Error: ${e.message}${FOOTER}`);
                     }
                 }
-                return; // ← STOP. Do not process as menu.
+                return;
             }
-            // Expired
             if (Date.now() - pending.timestamp >= 120000) {
                 pendingSelection.delete(sender);
             }
@@ -321,10 +334,6 @@ function setupCommandHandlers(socket, number) {
         // ==========================================
         // 🔢 MENU NUMBER REPLY HANDLER (STRICT)
         // ==========================================
-        // Menu list should ONLY appear when the user is replying to a
-        // message tracked in menuMessageIds Map (i.e., a real bot menu).
-        // Keyword-based fallback is REMOVED to prevent conflicts.
-
         const ctxInfo = msg.message?.extendedTextMessage?.contextInfo;
         const quotedStanza = ctxInfo?.stanzaId || '';
 
@@ -332,7 +341,6 @@ function setupCommandHandlers(socket, number) {
 
         if (!body.startsWith(prefix) && isMenuReply) {
 
-            // "0" → back to main menu
             if (trimmedBody === '0') {
                 const menuCmd = getCommand('menu');
                 if (menuCmd && typeof menuCmd.handleBack === 'function') {
@@ -341,7 +349,6 @@ function setupCommandHandlers(socket, number) {
                 }
             }
 
-            // 1-12 → category menu
             if (trimmedBody.match(/^([1-9]|1[0-2])$/)) {
                 const menuCmd = getCommand('menu');
                 if (menuCmd && typeof menuCmd.handleReply === 'function') {
@@ -368,7 +375,6 @@ function setupCommandHandlers(socket, number) {
                     if (shouldReply) {
                         const textLower = body.toLowerCase().trim();
 
-                        // Check custom replies
                         const savedList = await get('AUTOREPLY_LIST', number);
                         let customReplies = {};
                         try { customReplies = savedList ? JSON.parse(savedList) : {}; } catch (e) {}
@@ -378,7 +384,6 @@ function setupCommandHandlers(socket, number) {
                             return;
                         }
 
-                        // Built-in greetings
                         const words = textLower.split(/\s+/);
                         const hasWord = w => words.includes(w);
 
@@ -529,9 +534,6 @@ async function StartBot(number, res = null, isRestore = false) {
 
         let connectMessageSent = false;
 
-        // ==========================================
-        // 📨 CONNECT MESSAGE (with fallback)
-        // ==========================================
         const sendConnectMessage = async (currentSock, botNumber) => {
             if (connectMessageSent) return;
             connectMessageSent = true;
@@ -553,7 +555,6 @@ async function StartBot(number, res = null, isRestore = false) {
 > 🔗 Web: ${config.websiteUrl}
 > 📢 Channel: ${config.channelLink}${FOOTER}`;
 
-                // Try image first, fallback to text
                 let imageSent = false;
                 if (config.botImageUrl && config.botImageUrl.startsWith('http')) {
                     try {
@@ -579,7 +580,6 @@ async function StartBot(number, res = null, isRestore = false) {
 
                 await delay(1500);
 
-                // Try audio, fail silently
                 if (config.botAudioUrl && config.botAudioUrl.startsWith('http')) {
                     try {
                         await currentSock.sendMessage(ownJid, {
@@ -600,9 +600,6 @@ async function StartBot(number, res = null, isRestore = false) {
             }
         };
 
-        // ==========================================
-        // 🔄 CONNECTION UPDATE
-        // ==========================================
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
 
@@ -626,8 +623,8 @@ async function StartBot(number, res = null, isRestore = false) {
                 const code = lastDisconnect?.error?.output?.statusCode;
                 console.log(`⚠️ Connection closed: ${sanitized}, code: ${code}`);
                 activeSockets.delete(sanitized);
+                socketCreationTime.delete(sanitized);
 
-                // 401 = logged out
                 if (code === DisconnectReason.loggedOut || code === 401) {
                     console.log(`🚪 Session logged out: ${sanitized}. Cleaning up...`);
                     await Session.deleteOne({ number: sanitized }).catch(() => {});
@@ -635,12 +632,10 @@ async function StartBot(number, res = null, isRestore = false) {
                     reconnectAttempts.delete(sanitized);
                     console.log(`✅ Cleanup done for ${sanitized}. User must re-pair.`);
                 }
-                // 515 = restart required
                 else if (code === DisconnectReason.restartRequired || code === 515) {
                     console.log(`🔄 Restart required for ${sanitized}. Reconnecting...`);
                     setTimeout(() => StartBot(sanitized, null, true), 2000);
                 }
-                // other codes → exponential backoff
                 else {
                     const attempts = (reconnectAttempts.get(sanitized) || 0) + 1;
                     reconnectAttempts.set(sanitized, attempts);
@@ -773,6 +768,7 @@ router.post('/logout', async (req, res) => {
             const sock = activeSockets.get(sanitized);
             try { await sock.logout(); await sock.end(); } catch (e) {}
             activeSockets.delete(sanitized);
+            socketCreationTime.delete(sanitized);
         }
         await Session.deleteOne({ number: sanitized });
         await fs.remove(path.join(SESSION_BASE_PATH, `session_${sanitized}`));
@@ -831,7 +827,6 @@ router.get('/config', async (req, res) => {
 // ==========================================
 (async () => {
     try {
-        // Wait for Mongo connection
         await new Promise(resolve => {
             if (mongoose.connection.readyState === 1) resolve();
             else mongoose.connection.once('open', resolve);
@@ -851,6 +846,8 @@ router.get('/config', async (req, res) => {
 module.exports = router;
 module.exports.activeSockets = activeSockets;
 module.exports.socketCreationTime = socketCreationTime;
+module.exports.reconnectAttempts = reconnectAttempts;
+module.exports.messageCache = messageCache;
 module.exports.getChannelContext = getChannelContext;
 module.exports.isOwnerNumber = isOwnerNumber;
 module.exports.isMainOwnerNumber = isMainOwnerNumber;
@@ -859,3 +856,4 @@ module.exports.FOOTER = FOOTER;
 module.exports.SESSION_BASE_PATH = SESSION_BASE_PATH;
 module.exports.menuMessageIds = menuMessageIds;
 module.exports.pendingSelection = pendingSelection;
+module.exports.deletedMessages = deletedMessages;
