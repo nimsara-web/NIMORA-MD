@@ -310,66 +310,112 @@ ${messageText}
     });
 
     // ==========================================
-    // 🔒 AUTO VVSAVE
-    // ==========================================
-    socket.ev.on('messages.upsert', async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg || !msg.message) return;
-        if (msg.key.remoteJid === 'status@broadcast') return;
-        if (msg.key.fromMe) return;
+// 🔒 AUTO VVSAVE (FIXED — Silent view-once saver)
+// ==========================================
+socket.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg || !msg.message) return;
+    if (msg.key.remoteJid === 'status@broadcast') return;
+    if (msg.key.fromMe) return;
 
+    try {
+        // ==========================================
+        // 🔍 DETECT VIEW-ONCE (ALL variants)
+        // ==========================================
+        const hasViewOnce =
+            msg.message.viewOnceMessage ||
+            msg.message.viewOnceMessageV2 ||
+            msg.message.viewOnceMessageV2Extension;
+
+        if (!hasViewOnce) return;
+
+        console.log(`[AUTO-VVSAVE] 🔍 View-once detected from ${msg.key.remoteJid}`);
+
+        // ==========================================
+        // ⚙️ CHECK IF AUTO-VVSAVE IS ENABLED
+        // ==========================================
+        const autoEnabled = await get('VVSAVE_AUTO', number);
+        if (autoEnabled !== 'on') {
+            console.log(`[AUTO-VVSAVE] ⏸️ Auto-save is OFF`);
+            return;
+        }
+
+        // ==========================================
+        // 📦 UNWRAP VIEW-ONCE CONTENT
+        // ==========================================
+        let vvMsg = msg.message.viewOnceMessage?.message ||
+                    msg.message.viewOnceMessageV2?.message ||
+                    msg.message.viewOnceMessageV2Extension?.message;
+
+        if (!vvMsg) {
+            console.log(`[AUTO-VVSAVE] ⚠️ Could not unwrap view-once`);
+            return;
+        }
+
+        // ==========================================
+        // 🎯 DETECT MEDIA TYPE
+        // ==========================================
+        const mediaType = vvMsg.imageMessage ? 'imageMessage' :
+                          vvMsg.videoMessage ? 'videoMessage' :
+                          vvMsg.audioMessage ? 'audioMessage' : null;
+
+        if (!mediaType) {
+            console.log(`[AUTO-VVSAVE] ⚠️ No supported media type`);
+            return;
+        }
+
+        const mediaData = vvMsg[mediaType];
+        const sender = msg.key.remoteJid;
+        const senderJid = msg.key.participant || sender;
+        const senderNumber = senderJid.split('@')[0].split(':')[0];
+
+        console.log(`[AUTO-VVSAVE] 📥 Processing ${mediaType} from ${senderNumber}`);
+
+        // ==========================================
+        // 🔕 SILENT REACT
+        // ==========================================
+        const emoji = await get('VVSAVE_EMOJI', number) || '👀';
         try {
-            const hasViewOnce =
-                msg.message.viewOnceMessage ||
-                msg.message.viewOnceMessageV2 ||
-                msg.message.viewOnceMessageV2Extension;
+            await socket.sendMessage(sender, {
+                react: { text: emoji, key: msg.key }
+            });
+            console.log(`[AUTO-VVSAVE] ✅ Reacted with ${emoji}`);
+        } catch (e) {
+            console.log(`[AUTO-VVSAVE] ⚠️ React failed:`, e.message);
+        }
 
-            if (!hasViewOnce) return;
-
-            const autoEnabled = await get('VVSAVE_AUTO', number);
-            if (autoEnabled !== 'on') return;
-
-            let vvMsg = msg.message.viewOnceMessage?.message ||
-                        msg.message.viewOnceMessageV2?.message ||
-                        msg.message.viewOnceMessageV2Extension?.message;
-
-            if (!vvMsg) return;
-
-            const mediaType = vvMsg.imageMessage ? 'imageMessage' :
-                              vvMsg.videoMessage ? 'videoMessage' :
-                              vvMsg.audioMessage ? 'audioMessage' : null;
-
-            if (!mediaType) return;
-
-            const mediaData = vvMsg[mediaType];
-            const sender = msg.key.remoteJid;
-            const senderJid = msg.key.participant || sender;
-            const senderNumber = senderJid.split('@')[0].split(':')[0];
-
-            const emoji = await get('VVSAVE_EMOJI', number) || '👀';
-            try {
-                await socket.sendMessage(sender, {
-                    react: { text: emoji, key: msg.key }
-                });
-            } catch (e) {}
-
-            try {
-                const buffer = await downloadMediaMessage(
-                    {
-                        key: { remoteJid: sender, id: msg.key.id, participant: msg.key.participant },
-                        message: { [mediaType]: mediaData }
+        // ==========================================
+        // 📥 DOWNLOAD MEDIA
+        // ==========================================
+        try {
+            const buffer = await downloadMediaMessage(
+                {
+                    key: {
+                        remoteJid: sender,
+                        id: msg.key.id,
+                        participant: msg.key.participant
                     },
-                    'buffer',
-                    {},
-                    { logger: pino({ level: 'silent' }) }
-                );
+                    message: { [mediaType]: mediaData }
+                },
+                'buffer',
+                {},
+                { logger: pino({ level: 'silent' }) }
+            );
 
-                if (!buffer || buffer.length === 0) return;
+            if (!buffer || buffer.length === 0) {
+                console.log(`[AUTO-VVSAVE] ❌ Download failed (empty)`);
+                return;
+            }
 
-                const selfJid = `${number}@s.whatsapp.net`;
-                const chatType = sender.endsWith('@g.us') ? 'Group' : 'Inbox';
+            console.log(`[AUTO-VVSAVE] ✅ Downloaded ${buffer.length} bytes`);
 
-                const caption = `🔒 *AUTO-SAVED (Silent)*
+            // ==========================================
+            // 🎯 SEND TO BOT'S SELF-CHAT
+            // ==========================================
+            const selfJid = `${number}@s.whatsapp.net`;
+            const chatType = sender.endsWith('@g.us') ? 'Group' : 'Inbox';
+
+            const caption = `🔒 *AUTO-SAVED (Silent)*
 
 👤 *From:* @${senderNumber}
 📍 *Chat:* ${chatType}
@@ -377,28 +423,36 @@ ${messageText}
 ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
 > _Auto-VVSave enabled_`;
 
-                if (mediaType === 'imageMessage') {
-                    await socket.sendMessage(selfJid, {
-                        image: buffer,
-                        caption,
-                        mentions: [senderJid]
-                    });
-                } else if (mediaType === 'videoMessage') {
-                    await socket.sendMessage(selfJid, {
-                        video: buffer,
-                        caption,
-                        mentions: [senderJid]
-                    });
-                }
-
-                console.log(`[AUTO-VVSAVE] ✅ Saved from ${senderNumber}`);
-            } catch (err) {
-                console.log(`[AUTO-VVSAVE] ❌ Download failed:`, err.message);
+            if (mediaType === 'imageMessage') {
+                await socket.sendMessage(selfJid, {
+                    image: buffer,
+                    caption,
+                    mentions: [senderJid]
+                });
+            } else if (mediaType === 'videoMessage') {
+                await socket.sendMessage(selfJid, {
+                    video: buffer,
+                    caption,
+                    mentions: [senderJid]
+                });
+            } else if (mediaType === 'audioMessage') {
+                await socket.sendMessage(selfJid, {
+                    audio: buffer,
+                    mimetype: mediaData?.mimetype || 'audio/mpeg',
+                    ptt: false,
+                    contextInfo: getChannelContext()
+                });
             }
-        } catch (e) {
-            console.error('[AUTO-VVSAVE]', e.message);
+
+            console.log(`[AUTO-VVSAVE] ✅ Saved to self-chat: ${selfJid}`);
+
+        } catch (err) {
+            console.log(`[AUTO-VVSAVE] ❌ Download failed:`, err.message);
         }
-    });
+    } catch (e) {
+        console.error('[AUTO-VVSAVE]', e.message);
+    }
+});
 
     // ==========================================
     // 📩 MAIN MESSAGE HANDLER
