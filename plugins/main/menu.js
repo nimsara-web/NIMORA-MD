@@ -51,7 +51,7 @@ const CATEGORIES = {
             'dictionary', 'readmore', 'device', 'newgroup', 'delgroup',
             'save', 'block', 'unblock', 'help', 'id', 'settings', 'apply',
             'defaultimg', 'defaultfooter', 'list', 'menu', 'alive', 'jid',
-            'system', 'ping', 'whoami'
+            'system', 'ping', 'whoami', 'nodelet', 'remsg'
         ]
     },
     4: {
