@@ -136,7 +136,7 @@ async function useMongoDBAuthState(number) {
                 }
             }
         } catch (e) {
-                    console.error(`❌ saveCreds error:`, e.message);
+            console.error(`❌ saveCreds error:`, e.message);
         }
     };
 
@@ -144,7 +144,7 @@ async function useMongoDBAuthState(number) {
 }
 
 // ==========================================
-// 🧠 COMMAND CONTEXT BUILDER (FIXED)
+// 🧠 COMMAND CONTEXT BUILDER
 // ==========================================
 function buildContext(socket, msg, number, body, reply) {
     const sender = msg.key.remoteJid;
@@ -156,78 +156,35 @@ function buildContext(socket, msg, number, body, reply) {
     const args = body.slice(prefix.length).trim().split(/ +/);
     const command = args.shift()?.toLowerCase() || '';
 
-    // ==========================================
-    // 🔑 OWNER PERMISSION LOGIC (FIXED)
-    // ==========================================
+    // 🔑 OWNER PERMISSION LOGIC
     const isFromBot = msg.key.fromMe === true;
-
-    // Check sender number
     const senderIsOwner = isOwnerNumber(senderNumber);
     const senderIsMainOwner = isMainOwnerNumber(senderNumber);
-
-    // Check bot number (when message sent by bot itself)
     const botIsOwner = isOwnerNumber(number);
     const botIsMainOwner = isMainOwnerNumber(number);
 
-    // Final permission:
-    // - If from bot itself → use bot number's owner status
-    // - Otherwise → use sender's owner status
-    const finalIsOwner = isFromBot
-        ? (botIsOwner || senderIsOwner)
-        : senderIsOwner;
-
-    const finalIsMainOwner = isFromBot
-        ? (botIsMainOwner || senderIsMainOwner)
-        : senderIsMainOwner;
+    const finalIsOwner = isFromBot ? (botIsOwner || senderIsOwner) : senderIsOwner;
+    const finalIsMainOwner = isFromBot ? (botIsMainOwner || senderIsMainOwner) : senderIsMainOwner;
 
     return {
-        // Core
         socket, msg, number, body, reply,
         sender, senderJid, senderNumber, isGroup,
         prefix, args, command,
-
-        // Config & Constants
-        config,
-        FOOTER,
-
-        // Database
+        config, FOOTER,
         Session,
         get, input, handleSettingUpdate,
-
-        // Message helpers
         getMessageBody, unwrapMessage, getMediaType,
         downloadMediaMessage,
-
-        // Channel
         channelContext: getChannelContext(),
-
-        // Permissions (FIXED)
         isOwner: finalIsOwner,
         isMainOwner: finalIsMainOwner,
-
-        // Debug info
         _debug: {
-            senderNumber,
-            botNumber: number,
-            isFromBot,
-            senderIsOwner,
-            senderIsMainOwner,
-            botIsOwner,
-            botIsMainOwner,
+            senderNumber, botNumber: number, isFromBot,
+            senderIsOwner, senderIsMainOwner, botIsOwner, botIsMainOwner,
         },
-
-        // Shared state
-        activeSockets,
-        socketCreationTime,
-        reconnectAttempts,
-        messageCache,
-        menuMessageIds,
-        pendingSelection,
-        deletedMessages,
-
-        // Helpers
-        delay,
-        humanDelay,
+        activeSockets, socketCreationTime, reconnectAttempts,
+        messageCache, menuMessageIds, pendingSelection, deletedMessages,
+        delay, humanDelay,
     };
 }
 
@@ -253,44 +210,107 @@ async function dispatchCommand(ctx) {
 function setupCommandHandlers(socket, number) {
 
     // ==========================================
-    // 🗑️ ANTI-DELETE (messages.update)
+    // 🗑️ ANTI-DELETE (FIXED)
     // ==========================================
     socket.ev.on('messages.update', async (updates) => {
         try {
-            for (const { key, update } of updates) {
-                const protocol = update?.protocolMessage || update?.message?.protocolMessage;
+            for (const update of updates) {
+                const { key, update: updateData } = update;
+                if (!updateData) continue;
+
+                // 🔍 DETECT REVOKE
                 let revokedId = null;
 
+                // Method 1: protocolMessage
+                const protocol = updateData?.protocolMessage || updateData?.message?.protocolMessage;
                 if (protocol) {
-                    if (protocol.type === 0 || protocol.type === 'REVOKE' || protocol.key) {
+                    if (protocol.type === 0 || protocol.type === 'REVOKE') {
                         revokedId = protocol.key?.id || protocol.stanzaId;
                     }
                 }
-                if (!revokedId && update?.messageStubType === 1) revokedId = key?.id;
-                if (!revokedId && update?.message === null && key?.id) revokedId = key.id;
+
+                // Method 2: messageStubType
+                if (!revokedId && updateData.messageStubType === 1) {
+                    revokedId = key?.id;
+                }
+
+                // Method 3: message === null
+                if (!revokedId && updateData.message === null && key?.id) {
+                    revokedId = key.id;
+                }
+
                 if (!revokedId) continue;
 
-                const cached = messageCache.get(revokedId);
-                if (!cached) continue;
+                console.log(`[ANTI-DELETE] 🔍 Revoke detected: ${revokedId}`);
 
-                const chatJid = cached.key.remoteJid;
-                const senderJid = cached.key.participant || cached.key.remoteJid;
-                const text = getMessageBody(cached) || '[Media]';
+                // 🔍 FIND CACHED MESSAGE
+                let cachedMsg = messageCache.get(revokedId);
+                if (!cachedMsg) {
+                    for (const [cacheKey, value] of messageCache) {
+                        if (value?.key?.id === revokedId || value?.key?.stanzaId === revokedId) {
+                            cachedMsg = value;
+                            break;
+                        }
+                    }
+                }
 
+                if (!cachedMsg) {
+                    console.log(`[ANTI-DELETE] ⚠️ No cache for: ${revokedId}`);
+                    continue;
+                }
+
+                // 📝 EXTRACT
+                const chatJid = cachedMsg.key.remoteJid;
+                const senderJid = cachedMsg.key.participant || cachedMsg.key.remoteJid;
+                const senderName = senderJid.split('@')[0];
+                const messageText = getMessageBody(cachedMsg) || '[Media / Non-text message]';
+
+                // 💾 SAVE
                 deletedMessages.set(chatJid, {
                     sender: senderJid,
-                    text,
+                    senderName,
+                    text: messageText,
                     time: new Date().toLocaleString(),
+                    originalMsg: cachedMsg,
+                    keyId: revokedId,
                     timestamp: Date.now()
                 });
+
+                console.log(`[ANTI-DELETE] ✅ Captured: ${senderName} - "${messageText.substring(0, 50)}"`);
+
+                // 🔕 CHECK NODELETE STATUS
+                const nodeleteStatus = await get(`NODELETE_${chatJid}`, number);
+
+                if (nodeleteStatus === 'on') {
+                    try {
+                        const resendText = `🗑️ *DELETED MESSAGE DETECTED!*
+
+👤 *Sender:* @${senderName}
+⏰ *Time:* ${new Date().toLocaleString()}
+💬 *Message:*
+${messageText}
+
+> _Auto-recovered by ${config.botName}_${FOOTER}`;
+
+                        await socket.sendMessage(chatJid, {
+                            text: resendText,
+                            mentions: [senderJid],
+                            contextInfo: getChannelContext()
+                        });
+
+                        console.log(`[NODELETE] ✅ Auto-resent in ${chatJid}`);
+                    } catch (e) {
+                        console.log(`[NODELETE] ❌ Error:`, e.message);
+                    }
+                }
             }
         } catch (e) {
-            console.error('[ANTI-DELETE]', e.message);
+            console.error('[ANTI-DELETE] Error:', e.message);
         }
     });
 
     // ==========================================
-    // 🔒 AUTO VVSAVE (Silent view-once saver)
+    // 🔒 AUTO VVSAVE
     // ==========================================
     socket.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
@@ -299,7 +319,6 @@ function setupCommandHandlers(socket, number) {
         if (msg.key.fromMe) return;
 
         try {
-            // Check if message has view-once
             const hasViewOnce =
                 msg.message.viewOnceMessage ||
                 msg.message.viewOnceMessageV2 ||
@@ -307,18 +326,15 @@ function setupCommandHandlers(socket, number) {
 
             if (!hasViewOnce) return;
 
-            // Check if auto-vvsave is enabled
             const autoEnabled = await get('VVSAVE_AUTO', number);
             if (autoEnabled !== 'on') return;
 
-            // Get the view-once content
             let vvMsg = msg.message.viewOnceMessage?.message ||
                         msg.message.viewOnceMessageV2?.message ||
                         msg.message.viewOnceMessageV2Extension?.message;
 
             if (!vvMsg) return;
 
-            // Detect media
             const mediaType = vvMsg.imageMessage ? 'imageMessage' :
                               vvMsg.videoMessage ? 'videoMessage' :
                               vvMsg.audioMessage ? 'audioMessage' : null;
@@ -330,7 +346,6 @@ function setupCommandHandlers(socket, number) {
             const senderJid = msg.key.participant || sender;
             const senderNumber = senderJid.split('@')[0].split(':')[0];
 
-            // Silent react
             const emoji = await get('VVSAVE_EMOJI', number) || '👀';
             try {
                 await socket.sendMessage(sender, {
@@ -338,7 +353,6 @@ function setupCommandHandlers(socket, number) {
                 });
             } catch (e) {}
 
-            // Download
             try {
                 const buffer = await downloadMediaMessage(
                     {
@@ -352,7 +366,6 @@ function setupCommandHandlers(socket, number) {
 
                 if (!buffer || buffer.length === 0) return;
 
-                // Send to bot's self-chat
                 const selfJid = `${number}@s.whatsapp.net`;
                 const chatType = sender.endsWith('@g.us') ? 'Group' : 'Inbox';
 
@@ -378,7 +391,7 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
                     });
                 }
 
-                console.log(`[AUTO-VVSAVE] ✅ Saved from ${senderNumber} to self-chat`);
+                console.log(`[AUTO-VVSAVE] ✅ Saved from ${senderNumber}`);
             } catch (err) {
                 console.log(`[AUTO-VVSAVE] ❌ Download failed:`, err.message);
             }
@@ -395,12 +408,12 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
         if (!msg || !msg.message) return;
         if (msg.key.remoteJid === 'status@broadcast') return;
 
-        // Cache
+        // Cache (increased limit for better anti-delete)
         if (msg.key.id) {
             messageCache.set(msg.key.id, msg);
-            if (messageCache.size > 500) {
+            if (messageCache.size > 1000) {
                 const keys = messageCache.keys();
-                for (let i = 0; i < 250; i++) {
+                for (let i = 0; i < 500; i++) {
                     const k = keys.next().value;
                     if (k) messageCache.delete(k);
                 }
@@ -413,7 +426,7 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
         const sender = msg.key.remoteJid;
         const prefix = await get('PREFIX', number) || config.defaultPrefix;
 
-        // Build reply helper
+        // Reply helper
         const reply = async (content, quotedMsg = msg, react = true) => {
             let payload;
             if (typeof content === 'string') {
@@ -439,21 +452,16 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
 
         const trimmedBody = body.trim();
 
-        // ==========================================
-        // ⏳ PENDING SELECTION HANDLER (CHECK FIRST!)
-        // ==========================================
+        // ⏳ PENDING SELECTION
         if (pendingSelection.has(sender)) {
             const pending = pendingSelection.get(sender);
-
             if (Date.now() - pending.timestamp < 120000 && /^[1-9]$/.test(trimmedBody)) {
                 pendingSelection.delete(sender);
-
                 const handler = pending.handler;
                 if (typeof handler === 'function') {
                     try {
                         await handler(parseInt(trimmedBody), socket, msg, reply);
                     } catch (e) {
-                        console.error('[PENDING]', e);
                         await reply(`❌ Error: ${e.message}${FOOTER}`);
                     }
                 }
@@ -464,16 +472,12 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
             }
         }
 
-        // ==========================================
-        // 🔢 MENU NUMBER REPLY HANDLER (STRICT)
-        // ==========================================
+        // 🔢 MENU REPLY
         const ctxInfo = msg.message?.extendedTextMessage?.contextInfo;
         const quotedStanza = ctxInfo?.stanzaId || '';
-
         const isMenuReply = quotedStanza && menuMessageIds.has(quotedStanza);
 
         if (!body.startsWith(prefix) && isMenuReply) {
-
             if (trimmedBody === '0') {
                 const menuCmd = getCommand('menu');
                 if (menuCmd && typeof menuCmd.handleBack === 'function') {
@@ -481,7 +485,6 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
                     return;
                 }
             }
-
             if (trimmedBody.match(/^([1-9]|1[0-2])$/)) {
                 const menuCmd = getCommand('menu');
                 if (menuCmd && typeof menuCmd.handleReply === 'function') {
@@ -491,23 +494,18 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
             }
         }
 
-        // ==========================================
-        // 🤖 AUTO-REPLY (custom replies + basic)
-        // ==========================================
+        // 🤖 AUTO-REPLY
         if (!msg.key.fromMe) {
             try {
                 const autoReplyMode = await get('AUTOREPLY_MODE', number);
-
                 if (autoReplyMode && autoReplyMode !== 'off') {
                     const isGroup = sender.endsWith('@g.us');
-                    const shouldReply =
-                        autoReplyMode === 'all' ||
+                    const shouldReply = autoReplyMode === 'all' ||
                         (autoReplyMode === 'inbox' && !isGroup) ||
                         (autoReplyMode === 'group' && isGroup);
 
                     if (shouldReply) {
                         const textLower = body.toLowerCase().trim();
-
                         const savedList = await get('AUTOREPLY_LIST', number);
                         let customReplies = {};
                         try { customReplies = savedList ? JSON.parse(savedList) : {}; } catch (e) {}
@@ -531,19 +529,14 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
                         }
                     }
                 }
-            } catch (e) {
-                console.error('[AUTO-REPLY]', e.message);
-            }
+            } catch (e) {}
         }
 
-        // ==========================================
         // 🚀 COMMAND EXECUTION
-        // ==========================================
         if (!body.startsWith(prefix)) return;
 
         const ctx = buildContext(socket, msg, number, body, reply);
 
-        // Mode check
         const mode = await get('BOT_MODE', number) || config.defaultMode;
         if (!ctx.isOwner) {
             if (mode === 'private') return;
@@ -551,18 +544,15 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
             if (mode === 'inbox' && ctx.isGroup) return;
         }
 
-        // Paid check
         const paid = await checkPaidUser(ctx.senderNumber);
         if (!paid) {
-            return reply(`💎 *Premium Feature*\n\nThis command is for paid users only.\n📞 Contact owner: +${config.supportNumber}${FOOTER}`);
+            return reply(`💎 *Premium Feature*${FOOTER}`);
         }
 
         await dispatchCommand(ctx);
     });
 
-    // ==========================================
     // 👋 GROUP WELCOME/GOODBYE
-    // ==========================================
     socket.ev.on('group-participants.update', async (update) => {
         try {
             const { id, participants, action } = update;
@@ -597,14 +587,12 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
 function setupStatusAndPresenceHandlers(socket, number) {
     const getBotNumber = () => socket.user?.id ? socket.user.id.split(':')[0] : number;
 
-    // Auto view / auto like status
     socket.ev.on('messages.upsert', async ({ messages }) => {
         for (const msg of messages) {
             if (!msg.message) continue;
             if (msg.key.remoteJid !== 'status@broadcast') continue;
 
             const botNum = getBotNumber();
-
             const autoView = await get('AUTO_VIEW_STATUS', botNum);
             if (autoView !== 'false' && autoView !== 'off') {
                 try { await socket.readMessages([msg.key]); } catch (e) {}
@@ -622,7 +610,6 @@ function setupStatusAndPresenceHandlers(socket, number) {
         }
     });
 
-    // Always online pulse
     setInterval(async () => {
         try {
             const botNum = getBotNumber();
@@ -697,10 +684,7 @@ async function StartBot(number, res = null, isRestore = false) {
                             contextInfo: getChannelContext()
                         });
                         imageSent = true;
-                        console.log(`[CONNECT MSG] ✅ Image sent to ${botNumber}`);
-                    } catch (err) {
-                        console.log(`[CONNECT MSG] ⚠️ Image failed:`, err.message);
-                    }
+                    } catch (err) {}
                 }
 
                 if (!imageSent) {
@@ -708,7 +692,6 @@ async function StartBot(number, res = null, isRestore = false) {
                         text: caption,
                         contextInfo: getChannelContext()
                     });
-                    console.log(`[CONNECT MSG] ✅ Text sent to ${botNumber}`);
                 }
 
                 await delay(1500);
@@ -721,12 +704,8 @@ async function StartBot(number, res = null, isRestore = false) {
                             ptt: false,
                             contextInfo: getChannelContext()
                         });
-                        console.log(`[CONNECT MSG] ✅ Audio sent to ${botNumber}`);
-                    } catch (err) {
-                        console.log(`[CONNECT MSG] ⚠️ Audio failed (ignored):`, err.message);
-                    }
+                    } catch (err) {}
                 }
-
             } catch (err) {
                 console.log(`[CONNECT MSG] ❌`, err.message);
                 connectMessageSent = false;
@@ -751,29 +730,22 @@ async function StartBot(number, res = null, isRestore = false) {
                 if (res && !res.headersSent) {
                     return res.send({ status: 'connected', number: sanitized });
                 }
-
             } else if (connection === 'close') {
                 const code = lastDisconnect?.error?.output?.statusCode;
-                console.log(`⚠️ Connection closed: ${sanitized}, code: ${code}`);
+                console.log(`⚠️ Closed: ${sanitized}, code: ${code}`);
                 activeSockets.delete(sanitized);
                 socketCreationTime.delete(sanitized);
 
                 if (code === DisconnectReason.loggedOut || code === 401) {
-                    console.log(`🚪 Session logged out: ${sanitized}. Cleaning up...`);
                     await Session.deleteOne({ number: sanitized }).catch(() => {});
                     await fs.remove(path.join(SESSION_BASE_PATH, `session_${sanitized}`)).catch(() => {});
                     reconnectAttempts.delete(sanitized);
-                    console.log(`✅ Cleanup done for ${sanitized}. User must re-pair.`);
-                }
-                else if (code === DisconnectReason.restartRequired || code === 515) {
-                    console.log(`🔄 Restart required for ${sanitized}. Reconnecting...`);
+                } else if (code === DisconnectReason.restartRequired || code === 515) {
                     setTimeout(() => StartBot(sanitized, null, true), 2000);
-                }
-                else {
+                } else {
                     const attempts = (reconnectAttempts.get(sanitized) || 0) + 1;
                     reconnectAttempts.set(sanitized, attempts);
                     const delayTime = Math.min(3000 * Math.pow(1.5, attempts - 1), 60000);
-                    console.log(`🔄 Reconnecting ${sanitized} in ${delayTime}ms (attempt ${attempts})`);
                     setTimeout(() => StartBot(sanitized, null, true), delayTime);
                 }
             }
@@ -789,14 +761,13 @@ async function StartBot(number, res = null, isRestore = false) {
                 let code = await sock.requestPairingCode(sanitized);
                 code = code?.match(/.{1,4}/g)?.join('-') || code;
                 if (res && !res.headersSent) res.send({ code });
-                console.log(`✅ Pair code for ${sanitized}: ${code}`);
+                console.log(`✅ Pair code: ${code}`);
             } catch (err) {
                 if (res && !res.headersSent) return res.status(500).send({ error: err.message });
             }
         } else {
             if (res && !res.headersSent) return res.send({ status: 'already_registered', number: sanitized });
         }
-
     } catch (error) {
         console.error(`❌ StartBot error:`, error.message);
         if (res && !res.headersSent) return res.status(500).send({ error: error.message });
@@ -804,7 +775,7 @@ async function StartBot(number, res = null, isRestore = false) {
 }
 
 // ==========================================
-// 🔄 RESTORE SESSIONS ON STARTUP
+// 🔄 RESTORE SESSIONS
 // ==========================================
 async function restoreExistingSessions() {
     try {
@@ -836,8 +807,6 @@ async function restoreExistingSessions() {
 // ==========================================
 // 🛣️ API ROUTES
 // ==========================================
-
-// Pair / connect
 router.get('/', async (req, res) => {
     const { number } = req.query;
     if (!number) return res.status(400).send({ error: 'Phone number required!' });
@@ -856,7 +825,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Sessions list
 router.get('/sessions', async (req, res) => {
     try {
         const all = await Session.find({});
@@ -865,17 +833,13 @@ router.get('/sessions', async (req, res) => {
             total: all.length,
             activeCount: active.length,
             active,
-            sessions: all.map(s => ({
-                number: s.number,
-                isActive: active.includes(s.number)
-            }))
+            sessions: all.map(s => ({ number: s.number, isActive: active.includes(s.number) }))
         });
     } catch (e) {
         res.status(500).send({ error: e.message });
     }
 });
 
-// Reconnect
 router.post('/reconnect', async (req, res) => {
     const { number } = req.body || req.query;
     if (!number) return res.status(400).send({ error: 'Phone number required!' });
@@ -891,7 +855,6 @@ router.post('/reconnect', async (req, res) => {
     }
 });
 
-// Logout
 router.post('/logout', async (req, res) => {
     const { number } = req.body || req.query;
     if (!number) return res.status(400).send({ error: 'Phone number required!' });
@@ -911,20 +874,15 @@ router.post('/logout', async (req, res) => {
     }
 });
 
-// ==========================================
-// 📊 STATS (for website)
-// ==========================================
 router.get('/stats', async (req, res) => {
     try {
         const all = await Session.find({});
         const active = Array.from(activeSockets.keys());
-
         let totalUptime = 0;
         active.forEach(n => {
             const start = socketCreationTime.get(n);
             if (start) totalUptime += (Date.now() - start);
         });
-
         res.json({
             botName: config.botName,
             creator: config.ownerName,
@@ -939,9 +897,6 @@ router.get('/stats', async (req, res) => {
     }
 });
 
-// ==========================================
-// ⚙️ CONFIG (for website)
-// ==========================================
 router.get('/config', async (req, res) => {
     res.json({
         botName: config.botName,
@@ -956,7 +911,7 @@ router.get('/config', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 INITIALIZE PLUGINS + RESTORE SESSIONS
+// 🚀 INITIALIZE
 // ==========================================
 (async () => {
     try {
@@ -964,7 +919,6 @@ router.get('/config', async (req, res) => {
             if (mongoose.connection.readyState === 1) resolve();
             else mongoose.connection.once('open', resolve);
         });
-
         await loadPlugins();
         await delay(3000);
         await restoreExistingSessions();
