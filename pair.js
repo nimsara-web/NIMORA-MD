@@ -286,115 +286,117 @@ function setupCommandHandlers(socket, number) {
             return sent;
         };
 
-        // ==========================================
-        // 🔢 MENU NUMBER REPLY HANDLER
-        // ==========================================
-        const ctxInfo = msg.message?.extendedTextMessage?.contextInfo;
-        const quotedStanza = ctxInfo?.stanzaId || '';
-        const qm = ctxInfo?.quotedMessage || {};
-        const quotedText = qm.conversation || qm.extendedTextMessage?.text ||
-                           qm.imageMessage?.caption || qm.videoMessage?.caption || '';
-
-        const isMenuReply = (quotedStanza && menuMessageIds.has(quotedStanza)) ||
-            quotedText.includes('MENU CATEGORIES') ||
-            quotedText.includes('𝗠𝗔𝗜𝗡 𝗠𝗘𝗡𝗨') ||
-            (quotedText.includes('1️⃣') && quotedText.includes('2️⃣'));
-
-        // Handle "0" → back to main menu
-if (!body.startsWith(prefix) && body === '0' && isMenuReply) {
-    const menuCmd = getCommand('menu');
-    if (menuCmd && typeof menuCmd.handleBack === 'function') {
-        await menuCmd.handleBack(socket, msg, number, reply);
-        return;
-    }
-}
-
-        
-
-        if (!body.startsWith(prefix) && body.match(/^([1-9]|1[0-2])$/) && isMenuReply) {
-            const menuCmd = getCommand('menu');
-            if (menuCmd && typeof menuCmd.handleReply === 'function') {
-                await menuCmd.handleReply(parseInt(body), socket, msg, number, reply);
-                return;
-            }
-        }
+        const trimmedBody = body.trim();
 
         // ==========================================
-        // ⏳ PENDING SELECTION (quality / movie)
+        // ⏳ PENDING SELECTION HANDLER (CHECK FIRST!)
         // ==========================================
+        // This MUST come before menu reply check.
+        // .song, .movie, .video etc. use the SAME numbers (1, 2, 3)
+        // If pending exists → handle that, DON'T treat as menu.
         if (pendingSelection.has(sender)) {
             const pending = pendingSelection.get(sender);
-            if (Date.now() - pending.timestamp < 120000 && /^[1-9]$/.test(body)) {
+
+            // Valid selection: 1-9, within 2 minutes
+            if (Date.now() - pending.timestamp < 120000 && /^[1-9]$/.test(trimmedBody)) {
                 pendingSelection.delete(sender);
+
                 const handler = pending.handler;
                 if (typeof handler === 'function') {
                     try {
-                        await handler(parseInt(body), socket, msg, reply);
+                        await handler(parseInt(trimmedBody), socket, msg, reply);
                     } catch (e) {
+                        console.error('[PENDING]', e);
                         await reply(`❌ Error: ${e.message}${FOOTER}`);
                     }
                 }
-                return;
+                return; // ← STOP. Do not process as menu.
+            }
+            // Expired
+            if (Date.now() - pending.timestamp >= 120000) {
+                pendingSelection.delete(sender);
             }
         }
-
-
-        
 
         // ==========================================
-// 🤖 AUTO-REPLY (custom replies + basic)
-// ==========================================
-if (!msg.key.fromMe) {
-    try {
-        const autoReplyMode = await get('AUTOREPLY_MODE', number);
+        // 🔢 MENU NUMBER REPLY HANDLER (STRICT)
+        // ==========================================
+        // Menu list should ONLY appear when the user is replying to a
+        // message tracked in menuMessageIds Map (i.e., a real bot menu).
+        // Keyword-based fallback is REMOVED to prevent conflicts.
 
-        if (autoReplyMode && autoReplyMode !== 'off') {
-            const isGroup = sender.endsWith('@g.us');
-            const shouldReply =
-                autoReplyMode === 'all' ||
-                (autoReplyMode === 'inbox' && !isGroup) ||
-                (autoReplyMode === 'group' && isGroup);
+        const ctxInfo = msg.message?.extendedTextMessage?.contextInfo;
+        const quotedStanza = ctxInfo?.stanzaId || '';
 
-            if (shouldReply) {
-                const textLower = body.toLowerCase().trim();
+        const isMenuReply = quotedStanza && menuMessageIds.has(quotedStanza);
 
-                // Check custom replies
-                const savedList = await get('AUTOREPLY_LIST', number);
-                let customReplies = {};
-                try { customReplies = savedList ? JSON.parse(savedList) : {}; } catch (e) {}
+        if (!body.startsWith(prefix) && isMenuReply) {
 
-                if (customReplies[textLower]) {
-                    await reply(customReplies[textLower] + FOOTER);
+            // "0" → back to main menu
+            if (trimmedBody === '0') {
+                const menuCmd = getCommand('menu');
+                if (menuCmd && typeof menuCmd.handleBack === 'function') {
+                    await menuCmd.handleBack(socket, msg, number, reply);
                     return;
                 }
+            }
 
-                // Built-in greetings
-                const words = textLower.split(/\s+/);
-                const hasWord = w => words.includes(w);
-
-                if (hasWord('hi') || hasWord('hello') || hasWord('හායි')) {
-                    await reply('Hi! 👋' + FOOTER);
-                } else if (hasWord('gm') || textLower === 'good morning') {
-                    await reply('Good Morning 🌝' + FOOTER);
-                } else if (hasWord('gn') || textLower === 'good night') {
-                    await reply('Good Night ✨' + FOOTER);
-                } else if (hasWord('bye')) {
-                    await reply('Bye 🍻' + FOOTER);
+            // 1-12 → category menu
+            if (trimmedBody.match(/^([1-9]|1[0-2])$/)) {
+                const menuCmd = getCommand('menu');
+                if (menuCmd && typeof menuCmd.handleReply === 'function') {
+                    await menuCmd.handleReply(parseInt(trimmedBody), socket, msg, number, reply);
+                    return;
                 }
             }
         }
-    } catch (e) {
-        console.error('[AUTO-REPLY]', e.message);
-    }
-}
 
+        // ==========================================
+        // 🤖 AUTO-REPLY (custom replies + basic)
+        // ==========================================
+        if (!msg.key.fromMe) {
+            try {
+                const autoReplyMode = await get('AUTOREPLY_MODE', number);
 
+                if (autoReplyMode && autoReplyMode !== 'off') {
+                    const isGroup = sender.endsWith('@g.us');
+                    const shouldReply =
+                        autoReplyMode === 'all' ||
+                        (autoReplyMode === 'inbox' && !isGroup) ||
+                        (autoReplyMode === 'group' && isGroup);
 
+                    if (shouldReply) {
+                        const textLower = body.toLowerCase().trim();
 
+                        // Check custom replies
+                        const savedList = await get('AUTOREPLY_LIST', number);
+                        let customReplies = {};
+                        try { customReplies = savedList ? JSON.parse(savedList) : {}; } catch (e) {}
 
+                        if (customReplies[textLower]) {
+                            await reply(customReplies[textLower] + FOOTER);
+                            return;
+                        }
 
+                        // Built-in greetings
+                        const words = textLower.split(/\s+/);
+                        const hasWord = w => words.includes(w);
 
-        
+                        if (hasWord('hi') || hasWord('hello') || hasWord('හායි')) {
+                            await reply('Hi! 👋' + FOOTER);
+                        } else if (hasWord('gm') || textLower === 'good morning') {
+                            await reply('Good Morning 🌝' + FOOTER);
+                        } else if (hasWord('gn') || textLower === 'good night') {
+                            await reply('Good Night ✨' + FOOTER);
+                        } else if (hasWord('bye')) {
+                            await reply('Bye 🍻' + FOOTER);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[AUTO-REPLY]', e.message);
+            }
+        }
 
         // ==========================================
         // 🚀 COMMAND EXECUTION
@@ -527,6 +529,9 @@ async function StartBot(number, res = null, isRestore = false) {
 
         let connectMessageSent = false;
 
+        // ==========================================
+        // 📨 CONNECT MESSAGE (with fallback)
+        // ==========================================
         const sendConnectMessage = async (currentSock, botNumber) => {
             if (connectMessageSent) return;
             connectMessageSent = true;
@@ -535,9 +540,7 @@ async function StartBot(number, res = null, isRestore = false) {
                 const currentPrefix = await get('PREFIX', botNumber) || config.defaultPrefix;
                 const ownJid = `${botNumber}@s.whatsapp.net`;
 
-                await currentSock.sendMessage(ownJid, {
-                    image: { url: config.botImageUrl },
-                    caption: `🎉 *${botName} CONNECTED* 🎉
+                const caption = `🎉 *${botName} CONNECTED* 🎉
 
 > ✅ Your WhatsApp Bot is now online!
 
@@ -548,27 +551,58 @@ async function StartBot(number, res = null, isRestore = false) {
 > Type *${currentPrefix}menu* to view commands.
 
 > 🔗 Web: ${config.websiteUrl}
-> 📢 Channel: ${config.channelLink}${FOOTER}`,
-                    contextInfo: getChannelContext()
-                });
+> 📢 Channel: ${config.channelLink}${FOOTER}`;
+
+                // Try image first, fallback to text
+                let imageSent = false;
+                if (config.botImageUrl && config.botImageUrl.startsWith('http')) {
+                    try {
+                        await currentSock.sendMessage(ownJid, {
+                            image: { url: config.botImageUrl },
+                            caption,
+                            contextInfo: getChannelContext()
+                        });
+                        imageSent = true;
+                        console.log(`[CONNECT MSG] ✅ Image sent to ${botNumber}`);
+                    } catch (err) {
+                        console.log(`[CONNECT MSG] ⚠️ Image failed:`, err.message);
+                    }
+                }
+
+                if (!imageSent) {
+                    await currentSock.sendMessage(ownJid, {
+                        text: caption,
+                        contextInfo: getChannelContext()
+                    });
+                    console.log(`[CONNECT MSG] ✅ Text sent to ${botNumber}`);
+                }
 
                 await delay(1500);
 
-                // Send welcome audio
-                if (config.botAudioUrl) {
-                    await currentSock.sendMessage(ownJid, {
-                        audio: { url: config.botAudioUrl },
-                        mimetype: 'audio/mpeg',
-                        ptt: false,
-                        contextInfo: getChannelContext()
-                    });
+                // Try audio, fail silently
+                if (config.botAudioUrl && config.botAudioUrl.startsWith('http')) {
+                    try {
+                        await currentSock.sendMessage(ownJid, {
+                            audio: { url: config.botAudioUrl },
+                            mimetype: 'audio/mpeg',
+                            ptt: false,
+                            contextInfo: getChannelContext()
+                        });
+                        console.log(`[CONNECT MSG] ✅ Audio sent to ${botNumber}`);
+                    } catch (err) {
+                        console.log(`[CONNECT MSG] ⚠️ Audio failed (ignored):`, err.message);
+                    }
                 }
+
             } catch (err) {
                 console.log(`[CONNECT MSG] ❌`, err.message);
                 connectMessageSent = false;
             }
         };
 
+        // ==========================================
+        // 🔄 CONNECTION UPDATE
+        // ==========================================
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
 
@@ -593,13 +627,25 @@ async function StartBot(number, res = null, isRestore = false) {
                 console.log(`⚠️ Connection closed: ${sanitized}, code: ${code}`);
                 activeSockets.delete(sanitized);
 
+                // 401 = logged out
                 if (code === DisconnectReason.loggedOut || code === 401) {
-                    await Session.deleteOne({ number: sanitized });
-                    await fs.remove(path.join(SESSION_BASE_PATH, `session_${sanitized}`));
-                } else {
+                    console.log(`🚪 Session logged out: ${sanitized}. Cleaning up...`);
+                    await Session.deleteOne({ number: sanitized }).catch(() => {});
+                    await fs.remove(path.join(SESSION_BASE_PATH, `session_${sanitized}`)).catch(() => {});
+                    reconnectAttempts.delete(sanitized);
+                    console.log(`✅ Cleanup done for ${sanitized}. User must re-pair.`);
+                }
+                // 515 = restart required
+                else if (code === DisconnectReason.restartRequired || code === 515) {
+                    console.log(`🔄 Restart required for ${sanitized}. Reconnecting...`);
+                    setTimeout(() => StartBot(sanitized, null, true), 2000);
+                }
+                // other codes → exponential backoff
+                else {
                     const attempts = (reconnectAttempts.get(sanitized) || 0) + 1;
                     reconnectAttempts.set(sanitized, attempts);
                     const delayTime = Math.min(3000 * Math.pow(1.5, attempts - 1), 60000);
+                    console.log(`🔄 Reconnecting ${sanitized} in ${delayTime}ms (attempt ${attempts})`);
                     setTimeout(() => StartBot(sanitized, null, true), delayTime);
                 }
             }
@@ -736,7 +782,9 @@ router.post('/logout', async (req, res) => {
     }
 });
 
-// Stats for website
+// ==========================================
+// 📊 STATS (for website)
+// ==========================================
 router.get('/stats', async (req, res) => {
     try {
         const all = await Session.find({});
@@ -747,25 +795,6 @@ router.get('/stats', async (req, res) => {
             const start = socketCreationTime.get(n);
             if (start) totalUptime += (Date.now() - start);
         });
-
-
-        // Config for website
-router.get('/config', async (req, res) => {
-    res.json({
-        botName: config.botName,
-        botImageUrl: config.botImageUrl,
-        botAudioUrl: config.botAudioUrl,
-        websiteLogoUrl: config.websiteLogoUrl,
-        channelLink: config.channelLink,
-        websiteUrl: config.websiteUrl,
-        supportNumber: config.supportNumber,
-        ownerName: config.ownerName
-    });
-});
-
-
-
-        
 
         res.json({
             botName: config.botName,
@@ -779,6 +808,22 @@ router.get('/config', async (req, res) => {
     } catch (e) {
         res.status(500).send({ error: e.message });
     }
+});
+
+// ==========================================
+// ⚙️ CONFIG (for website)
+// ==========================================
+router.get('/config', async (req, res) => {
+    res.json({
+        botName: config.botName,
+        botImageUrl: config.botImageUrl,
+        botAudioUrl: config.botAudioUrl,
+        websiteLogoUrl: config.websiteLogoUrl,
+        channelLink: config.channelLink,
+        websiteUrl: config.websiteUrl,
+        supportNumber: config.supportNumber,
+        ownerName: config.ownerName
+    });
 });
 
 // ==========================================
@@ -800,7 +845,9 @@ router.get('/config', async (req, res) => {
     }
 })();
 
-// Expose helpers for plugins
+// ==========================================
+// 📤 EXPORTS
+// ==========================================
 module.exports = router;
 module.exports.activeSockets = activeSockets;
 module.exports.socketCreationTime = socketCreationTime;
@@ -810,3 +857,5 @@ module.exports.isMainOwnerNumber = isMainOwnerNumber;
 module.exports.StartBot = StartBot;
 module.exports.FOOTER = FOOTER;
 module.exports.SESSION_BASE_PATH = SESSION_BASE_PATH;
+module.exports.menuMessageIds = menuMessageIds;
+module.exports.pendingSelection = pendingSelection;
