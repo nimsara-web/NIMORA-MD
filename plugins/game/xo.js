@@ -1,5 +1,6 @@
 // Store XO games per chat
 const xoGames = new Map();
+const { xoGames } = require('./_state');
 
 function createBoard() {
     return ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
