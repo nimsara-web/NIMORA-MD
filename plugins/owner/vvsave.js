@@ -17,7 +17,11 @@ module.exports = {
     description: 'Silently save view-once media to bot self-chat',
 
     async execute(ctx) {
-        const { socket, msg, reply, sender, number, isOwner, get, input, handleSettingUpdate, unwrapMessage, getMediaType, FOOTER } = ctx;
+        const {
+            socket, msg, reply, sender, number, isOwner,
+            get, input, handleSettingUpdate,
+            unwrapMessage, getMediaType, FOOTER
+        } = ctx;
 
         // ==========================================
         // 👑 OWNER CHECK
@@ -26,17 +30,15 @@ module.exports = {
             return reply(`⚠️ *Only Bot Owner!*${FOOTER}`);
         }
 
-        // ==========================================
-        // ⚙️ CHECK CURRENT TOGGLE STATE
-        // ==========================================
         const args = ctx.args || [];
         const action = args[0]?.toLowerCase();
 
-        // Handle toggle commands
+        // ==========================================
+        // ⚙️ TOGGLE: on / off
+        // ==========================================
         if (action === 'on' || action === 'off') {
             await handleSettingUpdate('VVSAVE_ENABLED', action, reply, number);
 
-            // Send react emoji if enabled
             if (action === 'on') {
                 const emoji = args[1] || '👀';
                 await input('VVSAVE_EMOJI', emoji, number);
@@ -53,7 +55,9 @@ module.exports = {
             return;
         }
 
-        // Handle emoji change
+        // ==========================================
+        // 🎯 EMOJI CHANGE
+        // ==========================================
         if (action === 'emoji') {
             const newEmoji = args[1];
             if (!newEmoji) {
@@ -65,15 +69,19 @@ module.exports = {
             return;
         }
 
-        // Handle status check
-        if (action === 'status' || !action) {
+        // ==========================================
+        // 📊 STATUS (also default when no args)
+        // ==========================================
+        const quoted = msg.message?.extendedTextMessage?.contextInfo;
+        const hasQuotedMedia = quoted?.quotedMessage &&
+            (quoted.quotedMessage.imageMessage || quoted.quotedMessage.videoMessage ||
+             quoted.quotedMessage.viewOnceMessage || quoted.quotedMessage.viewOnceMessageV2);
+
+        if (action === 'status' || (!action && !hasQuotedMedia)) {
             const enabled = await get('VVSAVE_ENABLED', number) || 'off';
             const emoji = await get('VVSAVE_EMOJI', number) || '👀';
 
-            // If no action AND no quoted message → show status
-            const quoted = msg.message?.extendedTextMessage?.contextInfo;
-            if (!quoted?.quotedMessage && (!action || action === 'status')) {
-                return reply(`📊 *VVSAVE STATUS*
+            return reply(`📊 *VVSAVE STATUS*
 
 🔘 *Status:* ${enabled === 'on' ? '✅ ON' : '❌ OFF'}
 🎯 *Emoji:* ${emoji}
@@ -85,11 +93,10 @@ module.exports = {
 • \`.vvsave emoji [emoji]\` - Change emoji
 
 💡 *How to use:* Reply to a view-once media with \`.vvsave\`${FOOTER}`);
-            }
         }
 
         // ==========================================
-        // ⚙️ CHECK IF ENABLED
+        // ⚙️ CHECK ENABLED
         // ==========================================
         const enabled = await get('VVSAVE_ENABLED', number) || 'off';
         if (enabled !== 'on' && action !== 'force') {
@@ -99,7 +106,6 @@ module.exports = {
         // ==========================================
         // 📥 GET QUOTED MEDIA
         // ==========================================
-        const quoted = msg.message?.extendedTextMessage?.contextInfo;
         if (!quoted || !quoted.quotedMessage) {
             return reply(`⚠️ *Reply to a View Once media with \`.vvsave\`*${FOOTER}`);
         }
@@ -124,7 +130,6 @@ module.exports = {
         // ==========================================
         const emoji = await get('VVSAVE_EMOJI', number) || '👀';
         try {
-            // React to the ORIGINAL message (silent acknowledgment)
             await socket.sendMessage(sender, {
                 react: { text: emoji, key: msg.key }
             });
@@ -164,8 +169,7 @@ module.exports = {
             // ==========================================
             // 🎯 SEND TO BOT'S OWN SELF-CHAT (SILENT!)
             // ==========================================
-            const botNumber = number;
-            const selfJid = `${botNumber}@s.whatsapp.net`;
+            const selfJid = `${number}@s.whatsapp.net`;
 
             const senderName = (quoted.participant || sender).split('@')[0];
             const chatType = sender.endsWith('@g.us') ? 'Group' : 'Inbox';
@@ -179,7 +183,6 @@ module.exports = {
 ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
 > _Saved by VVSave - Owner only_${FOOTER}`;
 
-            // Send to bot's own self-chat (only bot can see this!)
             if (messageType === 'imageMessage') {
                 await socket.sendMessage(selfJid, {
                     image: buffer,
@@ -198,7 +201,6 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
 
         } catch (err) {
             console.error('[VVSAVE] Error:', err.message);
-            // Silent fail - no reply to sender
         }
     }
 };
