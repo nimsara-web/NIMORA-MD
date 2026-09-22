@@ -20,9 +20,9 @@ module.exports = {
     // 🤖 BOT BRANDING
     // ==========================================
     botName: process.env.BOT_NAME || 'NIMORA MD',
-    botImageUrl: process.env.BOT_IMAGE_URL || 'https://i.ibb.co/placeholder-logo.jpg',
+    botImageUrl: process.env.BOT_IMAGE_URL || 'https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Data/Nim-Bot-New-Logo.jfif',
     botAudioUrl: process.env.BOT_AUDIO_URL || 'https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Data/welcome%20nim%20new.MP3',
-    websiteLogoUrl: process.env.WEBSITE_LOGO_URL || 'https://i.ibb.co/placeholder-website-logo.png',
+    websiteLogoUrl: process.env.WEBSITE_LOGO_URL || 'https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Data/Nim-Bot-New-Logo.jfif',
 
     // ==========================================
     // 📢 WHATSAPP CHANNEL
