@@ -12,7 +12,9 @@ function getPairModule() {
     return require('../../pair');
 }
 
-// Category definitions (1-12)
+// ==========================================
+// 📂 CATEGORY DEFINITIONS (1-12)
+// ==========================================
 const CATEGORIES = {
     1: {
         name: 'CONVERT',
@@ -35,7 +37,8 @@ const CATEGORIES = {
             'remove', 'backup', 'restore', 'reset', 'note', 'myenv', 'dsn',
             'report', 'quote', 'alljid', 'restart', 'join', 'about', 'theme',
             'addseedr', 'addcmd', 'getcmd', 'delcmd', 'resetcmd', 'eval',
-            'setup', 'tgauth', 'tgconfig'
+            'setup', 'tgauth', 'tgconfig',
+            'vvsave', 'vvsaveauto'
         ]
     },
     3: {
@@ -131,8 +134,7 @@ function buildCategoryMenu(num) {
 }
 
 function buildMainMenu(botName, activeCount, followStatus) {
-    let text = `
-*👋 ${botName.toUpperCase()} 🥷🏻*
+    let text = `*👋 ${botName.toUpperCase()} 🥷🏻*
 *-- The Mini WhatsApp Bot Experience --*
 
 > © ᴄʀᴇᴀᴛᴏʀ ʙY ɴɪᴍꜱᴀʀᴀ 🥷🏻
