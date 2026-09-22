@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIMORA - MD | Pair WhatsApp Bot</title>
+<link rel="icon" href="https://i.ibb.co/placeholder-favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+        --red-primary: #ff1e1e;
+        --red-glow: rgba(255, 30, 30, 0.6);
+        --red-dark: #8b0000;
+        --red-soft: #ff4d4d;
+        --bg-dark: #0a0000;
+        --bg-card: rgba(20, 2, 2, 0.85);
+    }
+
+    html, body {
+        font-family: 'Rajdhani', sans-serif;
+        background: var(--bg-dark);
+        color: #fff;
+        min-height: 100vh;
+        overflow-x: hidden;
+        position: relative;
+    }
+
+    /* Animated Red Particles Canvas */
+    #particles-canvas {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: -1;
+        background: radial-gradient(ellipse at bottom, #1a0000 0%, #000 100%);
+    }
+
+    /* Floating Red Orbs */
+    .orb {
+        position: fixed;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--red-primary), transparent 70%);
+        filter: blur(60px);
+        opacity: 0.4;
+        z-index: -1;
+        animation: floatOrb 15s ease-in-out infinite;
+    }
+    .orb1 { width: 300px; height: 300px; top: 10%; left: -100px; animation-delay: 0s; }
+    .orb2 { width: 400px; height: 400px; bottom: 10%; right: -150px; animation-delay: 5s; }
+    .orb3 { width: 250px; height: 250px; top: 50%; left: 50%; animation-delay: 10s; }
+
+    @keyframes floatOrb {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(30px, -30px) scale(1.1); }
+    }
+
+    /* Container */
+    .container {
+        max-width: 500px;
+        margin: 0 auto;
+        padding: 25px 20px 100px;
+        position: relative;
+        z-index: 10;
+    }
+
+    /* Header */
+    .header {
+        text-align: center;
+        margin-bottom: 25px;
+        animation: fadeInDown 0.9s ease;
+    }
+
+    .logo-container {
+        width: 110px;
+        height: 110px;
+        margin: 0 auto 15px;
+        border-radius: 50%;
+        padding: 4px;
+        background: linear-gradient(135deg, var(--red-primary), var(--red-dark), var(--red-primary));
+        background-size: 200% 200%;
+        animation: rotateBorder 4s linear infinite;
+        box-shadow: 0 0 30px var(--red-glow), inset 0 0 20px rgba(255, 30, 30, 0.3);
+    }
+
+    .logo-container img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid var(--bg-dark);
+        background: var(--bg-dark);
+    }
+
+    @keyframes rotateBorder {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    .title {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 34px;
+        font-weight: 900;
+        color: var(--red-primary);
+        letter-spacing: 3px;
+        text-shadow:
+            0 0 10px var(--red-glow),
+            0 0 20px var(--red-glow),
+            0 0 40px var(--red-glow);
+        animation: pulseGlow 2s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlow {
+        0%, 100% { text-shadow: 0 0 10px var(--red-glow), 0 0 20px var(--red-glow); }
+        50% { text-shadow: 0 0 20px var(--red-primary), 0 0 40px var(--red-primary), 0 0 60px var(--red-primary); }
+    }
+
+    .subtitle {
+        color: #b8b8b8;
+        font-size: 15px;
+        margin-top: 6px;
+        letter-spacing: 1.5px;
+    }
+
+    .subtitle b {
+        color: var(--red-soft);
+        text-shadow: 0 0 8px var(--red-glow);
+    }
+
+    /* Cards */
+    .card {
+        background: var(--bg-card);
+        border: 1.5px solid rgba(255, 30, 30, 0.4);
+        border-radius: 16px;
+        padding: 22px 20px;
+        margin-bottom: 18px;
+        backdrop-filter: blur(12px);
+        box-shadow:
+            0 0 25px rgba(255, 30, 30, 0.15),
+            inset 0 0 15px rgba(255, 30, 30, 0.05);
+        animation: cardSlideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.15s; }
+    .card:nth-child(3) { animation-delay: 0.3s; }
+    .card:nth-child(4) { animation-delay: 0.45s; }
+
+    @keyframes cardSlideUp {
+        from { opacity: 0; transform: translateY(30px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-title {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--red-primary);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .card-title::before {
+        content: '';
+        width: 4px;
+        height: 18px;
+        background: var(--red-primary);
+        border-radius: 2px;
+        box-shadow: 0 0 10px var(--red-glow);
+    }
+
+    /* Input */
+    .input-group {
+        position: relative;
+        margin-bottom: 15px;
+    }
+
+    input[type="text"] {
+        width: 100%;
+        padding: 15px 18px;
+        border-radius: 10px;
+        border: 1.5px solid rgba(255, 30, 30, 0.35);
+        background: rgba(10, 0, 0, 0.8);
+        color: #fff;
+        font-size: 16px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 600;
+        letter-spacing: 1px;
+        outline: none;
+        transition: all 0.3s ease;
+    }
+
+    input[type="text"]:focus {
+        border-color: var(--red-primary);
+        box-shadow: 0 0 20px var(--red-glow), inset 0 0 10px rgba(255, 30, 30, 0.1);
+        background: rgba(20, 0, 0, 0.9);
+    }
+
+    input[type="text"]::placeholder {
+        color: #666;
+        font-weight: 500;
+    }
+
+    /* Buttons */
+    .btn {
+        width: 100%;
+        padding: 15px 20px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #fff;
+        background: linear-gradient(135deg, var(--red-dark), var(--red-primary), var(--red-dark));
+        background-size: 200% 200%;
+        box-shadow: 0 4px 20px rgba(255, 30, 30, 0.5);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 30px var(--red-glow);
+        animation: shimmer 1.5s linear infinite;
+    }
+
+    .btn:active {
+        transform: translateY(0);
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    @keyframes shimmer {
+        0% { background-position: 0% 50%; }
+        100% { background-position: 200% 50%; }
+    }
+
+    /* Code display */
+    .code-display {
+        margin-top: 15px;
+        padding: 18px;
+        border-radius: 12px;
+        background: rgba(10, 0, 0, 0.9);
+        border: 1.5px dashed var(--red-primary);
+        text-align: center;
+        display: none;
+        animation: fadeIn 0.4s ease;
+    }
+
+    .code-display.show { display: block; }
+
+    .code-text {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 26px;
+        font-weight: 900;
+        color: var(--red-primary);
+        letter-spacing: 4px;
+        text-shadow: 0 0 15px var(--red-glow);
+        margin: 10px 0;
+        word-break: break-all;
+    }
+
+    .copy-btn {
+        background: rgba(255, 30, 30, 0.15);
+        border: 1.5px solid var(--red-primary);
+        color: var(--red-primary);
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 1.5px;
+        cursor: pointer;
+        margin-top: 8px;
+        transition: all 0.3s ease;
+    }
+
+    .copy-btn:hover {
+        background: var(--red-primary);
+        color: #fff;
+        box-shadow: 0 0 15px var(--red-glow);
+    }
+
+    .copy-btn.copied {
+        background: #00cc44;
+        border-color: #00cc44;
+        color: #fff;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .stat-box {
+        padding: 14px 10px;
+        border-radius: 10px;
+        background: rgba(255, 30, 30, 0.08);
+        border: 1.5px solid rgba(255, 30, 30, 0.25);
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .stat-box:hover {
+        border-color: var(--red-primary);
+        box-shadow: 0 0 15px rgba(255, 30, 30, 0.3);
+        transform: translateY(-2px);
+    }
+
+    .stat-value {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 24px;
+        font-weight: 900;
+        color: var(--red-primary);
+        text-shadow: 0 0 10px var(--red-glow);
+    }
+
+    .stat-label {
+        font-size: 12px;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-top: 4px;
+    }
+
+    /* Active bots list */
+    .active-list {
+        max-height: 180px;
+        overflow-y: auto;
+        margin-top: 10px;
+    }
+
+    .active-list::-webkit-scrollbar { width: 6px; }
+    .active-list::-webkit-scrollbar-track { background: rgba(255,30,30,0.05); border-radius: 3px; }
+    .active-list::-webkit-scrollbar-thumb { background: var(--red-primary); border-radius: 3px; }
+
+    .active-item {
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: rgba(255, 30, 30, 0.06);
+        border-left: 3px solid var(--red-primary);
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .active-item .num { color: var(--red-soft); letter-spacing: 1px; }
+    .active-item .time { color: #888; font-size: 12px; }
+
+    .empty-state {
+        text-align: center;
+        color: #666;
+        padding: 15px;
+        font-style: italic;
+    }
+
+    /* Links */
+    .link-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .link-btn {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        text-align: center;
+        text-decoration: none;
+        color: #fff;
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 1px;
+        border: 1.5px solid rgba(255, 30, 30, 0.4);
+        background: rgba(255, 30, 30, 0.08);
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .link-btn:hover {
+        border-color: var(--red-primary);
+        background: rgba(255, 30, 30, 0.2);
+        box-shadow: 0 0 15px rgba(255, 30, 30, 0.4);
+        transform: translateY(-2px);
+    }
+
+    /* Floating buttons */
+    .sound-toggle {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: var(--bg-card);
+        border: 2px solid var(--red-primary);
+        color: var(--red-primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 200;
+        font-size: 20px;
+        box-shadow: 0 0 15px rgba(255, 30, 30, 0.4);
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+    }
+
+    .sound-toggle:hover {
+        background: var(--red-primary);
+        color: #fff;
+        transform: rotate(15deg) scale(1.05);
+        box-shadow: 0 0 25px var(--red-glow);
+    }
+
+    /* Help button */
+    .help-container {
+        position: fixed;
+        bottom: 22px;
+        right: 22px;
+        z-index: 200;
+    }
+
+    .help-btn {
+        width: 58px;
+        height: 58px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--red-dark), var(--red-primary));
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 26px;
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        box-shadow: 0 0 20px var(--red-glow);
+        transition: all 0.3s ease;
+    }
+
+    .help-btn:hover {
+        transform: scale(1.1) rotate(-8deg);
+        box-shadow: 0 0 35px var(--red-primary);
+    }
+
+    .help-modal {
+        position: absolute;
+        bottom: 72px;
+        right: 0;
+        width: 260px;
+        background: var(--bg-card);
+        border: 2px solid var(--red-primary);
+        border-radius: 14px;
+        padding: 18px;
+        text-align: center;
+        backdrop-filter: blur(15px);
+        box-shadow: 0 0 25px rgba(255, 30, 30, 0.4);
+        display: none;
+        animation: fadeInUp 0.3s ease;
+    }
+
+    .help-modal.show { display: block; }
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .help-modal h4 {
+        color: var(--red-primary);
+        font-family: 'Orbitron', sans-serif;
+        font-size: 14px;
+        letter-spacing: 2px;
+        margin-bottom: 10px;
+    }
+
+    .help-modal p {
+        font-size: 13px;
+        color: #aaa;
+        margin-bottom: 10px;
+    }
+
+    .help-contact {
+        display: block;
+        padding: 10px;
+        border-radius: 8px;
+        background: rgba(255, 30, 30, 0.15);
+        border: 1.5px solid var(--red-primary);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+    }
+
+    .help-contact:hover {
+        background: var(--red-primary);
+        box-shadow: 0 0 15px var(--red-glow);
+    }
+
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #666;
+        font-size: 12px;
+        letter-spacing: 1px;
+        margin-top: 25px;
+        padding-bottom: 20px;
+    }
+
+    .footer b { color: var(--red-soft); }
+
+    /* Loading spinner */
+    .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    /* ===== DARK BACKGROUND ANIMATION ===== */
+    @keyframes bgShift {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+    }
+</style>
+</head>
+<body>
+
+<!-- Background -->
+<canvas id="particles-canvas"></canvas>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<!-- Audio (replace src with your own) -->
+<audio id="bg-audio" loop preload="auto">
+    <source src="https://github.com/nimsara-web/Im-Nim/raw/refs/heads/main/Data/MASHUQ%20HAQUE%20-%20AIRTEL%20PHONK%20%20A.%20R.%20RAHMAN%20(PHONK).mp3" type="audio/mpeg">
+</audio>
+
+<!-- Sound toggle -->
+<div class="sound-toggle" id="sound-toggle" onclick="toggleSound()" title="Toggle Music">🔇</div>
+
+<!-- Main container -->
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="logo-container">
+            <img id="logo-img"
+                 src="https://i.ibb.co/placeholder-logo.jpg"
+                 alt="NIMORA MD Logo"
+                 onerror="this.src='https://via.placeholder.com/110/ff1e1e/fff?text=N'">
+        </div>
+        <h1 class="title">NIMORA - MD</h1>
+        <p class="subtitle">Creator By <b>Nimsara</b></p>
+    </div>
+
+    <!-- Pair card -->
+    <div class="card">
+        <div class="card-title">🔗 Pair Your Bot</div>
+        <div class="input-group">
+            <input type="text" id="number" placeholder="Enter number (e.g. 94784280074)" autocomplete="off">
+        </div>
+        <button class="btn" id="pair-btn" onclick="getPairCode()">
+            <span id="pair-btn-text">Get Pairing Code</span>
+        </button>
+
+        <div class="code-display" id="code-display">
+            <div style="font-size:12px;color:#999;letter-spacing:1.5px;">YOUR PAIRING CODE</div>
+            <div class="code-text" id="code-text">------</div>
+            <button class="copy-btn" id="copy-btn" onclick="copyCode()">📋 Copy Code</button>
+        </div>
+    </div>
+
+    <!-- Stats card -->
+    <div class="card">
+        <div class="card-title">📊 Live Stats</div>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-value" id="stat-active">0</div>
+                <div class="stat-label">Active Bots</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-label">Total Sessions</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="stat-runtime">0h</div>
+                <div class="stat-label">Server Uptime</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="stat-avg">0m</div>
+                <div class="stat-label">Avg Bot Uptime</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active bots -->
+    <div class="card">
+        <div class="card-title">🟢 Active Bots</div>
+        <div class="active-list" id="active-list">
+            <div class="empty-state">No active bots right now</div>
+        </div>
+    </div>
+
+    <!-- Links -->
+    <div class="card">
+        <div class="card-title">🔗 Connect</div>
+        <div class="link-row">
+            <a class="link-btn" href="https://nimsara-official.vercel.app/" target="_blank">🌐 Website</a>
+            <a class="link-btn" href="https://whatsapp.com/channel/0029Vb0bsRuFnSz4XAQ2yT0r" target="_blank">📢 Channel</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        © ᴄʀᴇᴀᴛᴏʀ ʙY <b>ɴɪᴍꜱᴀʀᴀ</b> 🥷🏻
+    </div>
+</div>
+
+<!-- Help Center -->
+<div class="help-container">
+    <div class="help-btn" onclick="toggleHelp()" title="Help">💬</div>
+    <div class="help-modal" id="help-modal">
+        <h4>Need Help?</h4>
+        <p>Contact support on WhatsApp</p>
+        <a class="help-contact" href="https://wa.me/94784280074" target="_blank">
+            📞 078 428 0074
+        </a>
+    </div>
+</div>
+
+<script>
+// ==========================================
+// 🔴 PARTICLES BACKGROUND
+// ==========================================
+const canvas = document.getElementById('particles-canvas');
+const ctx = canvas.getContext('2d');
+
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+});
+
+const particles = [];
+const NUM = 90;
+
+for (let i = 0; i < NUM; i++) {
+    particles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        size: Math.random() * 2.5 + 1,
+        speed: Math.random() * 0.6 + 0.2,
+        opacity: Math.random() * 0.8 + 0.2,
+        drift: (Math.random() - 0.5) * 0.4
+    });
+}
+
+function animate() {
+    ctx.clearRect(0, 0, W, H);
+
+    particles.forEach(p => {
+        ctx.globalAlpha = p.opacity;
+        ctx.fillStyle = '#ff1e1e';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#ff1e1e';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+
+        p.y += p.speed;
+        p.x += p.drift;
+
+        if (p.y > H) { p.y = 0; p.x = Math.random() * W; }
+        if (p.x > W) p.x = 0;
+        if (p.x < 0) p.x = W;
+    });
+
+    requestAnimationFrame(animate);
+}
+animate();
+
+// ==========================================
+// 🔴 AUDIO TOGGLE
+// ==========================================
+const audio = document.getElementById('bg-audio');
+const soundToggle = document.getElementById('sound-toggle');
+let isPlaying = false;
+
+// Auto-play attempt on first click/tap
+function tryAutoPlay() {
+    audio.play().then(() => {
+        soundToggle.innerHTML = '🔊';
+        isPlaying = true;
+        document.removeEventListener('click', tryAutoPlay);
+        document.removeEventListener('touchstart', tryAutoPlay);
+    }).catch(() => {});
+}
+document.addEventListener('click', tryAutoPlay);
+document.addEventListener('touchstart', tryAutoPlay);
+
+function toggleSound() {
+    if (isPlaying) {
+        audio.pause();
+        soundToggle.innerHTML = '🔇';
+        isPlaying = false;
+    } else {
+        audio.play().then(() => {
+            soundToggle.innerHTML = '🔊';
+            isPlaying = true;
+        }).catch(e => console.log('Audio blocked:', e));
+    }
+}
+
+// ==========================================
+// 🔴 HELP MODAL
+// ==========================================
+function toggleHelp() {
+    document.getElementById('help-modal').classList.toggle('show');
+}
+
+// Close help when clicking outside
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('help-modal');
+    const btn = document.querySelector('.help-btn');
+    if (!modal.contains(e.target) && !btn.contains(e.target)) {
+        modal.classList.remove('show');
+    }
+});
+
+// ==========================================
+// 🔴 PAIR CODE FETCH
+// ==========================================
+let currentCode = '';
+
+async function getPairCode() {
+    const num = document.getElementById('number').value.trim();
+    const codeDisplay = document.getElementById('code-display');
+    const codeText = document.getElementById('code-text');
+    const btn = document.getElementById('pair-btn');
+    const btnText = document.getElementById('pair-btn-text');
+
+    if (!num) {
+        showToast('Please enter your phone number!', 'error');
+        return;
+    }
+
+    if (!/^[0-9]{9,15}$/.test(num.replace(/[^0-9]/g, ''))) {
+        showToast('Invalid number format! Use: 94784280074', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="spinner"></span>Generating...';
+    codeDisplay.classList.remove('show');
+
+    try {
+        const clean = num.replace(/[^0-9]/g, '');
+        const res = await fetch(`/pair?number=${clean}`);
+        const data = await res.json();
+
+        if (data.code) {
+            currentCode = data.code;
+            codeText.textContent = data.code;
+            codeDisplay.classList.add('show');
+            showToast('Pair code generated! ✅', 'success');
+        } else if (data.status === 'already_registered') {
+            showToast('This number is already connected!', 'info');
+        } else if (data.error) {
+            showToast('Error: ' + data.error, 'error');
+        } else {
+            showToast('Failed to generate code. Try again.', 'error');
+        }
+    } catch (e) {
+        showToast('Server connection failed!', 'error');
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Get Pairing Code';
+    }
+}
+
+// ==========================================
+// 🔴 COPY CODE
+// ==========================================
+function copyCode() {
+    if (!currentCode) return;
+    navigator.clipboard.writeText(currentCode).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.classList.add('copied');
+        btn.innerHTML = '✅ Copied!';
+        showToast('Code copied to clipboard!', 'success');
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = '📋 Copy Code';
+        }, 2000);
+    }).catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = currentCode;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Code copied!', 'success');
+    });
+}
+
+// ==========================================
+// 🔴 TOAST NOTIFICATIONS
+// ==========================================
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+
+    const colors = {
+        success: '#00cc44',
+        error: '#ff1e1e',
+        info: '#ff4d4d'
+    };
+
+    toast.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%) translateY(-20px);
+        background: ${colors[type]};
+        color: #fff;
+        padding: 12px 22px;
+        border-radius: 10px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.5px;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+        z-index: 9999;
+        opacity: 0;
+        transition: all 0.3s ease;
+        max-width: 85%;
+        text-align: center;
+    `;
+
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    });
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 2500);
+}
+
+// ==========================================
+// 🔴 LIVE STATS POLLING
+// ==========================================
+async function fetchStats() {
+    try {
+        const res = await fetch('/pair/stats');
+        const data = await res.json();
+
+        document.getElementById('stat-active').textContent = data.activeCount || 0;
+        document.getElementById('stat-total').textContent = data.totalSessions || 0;
+
+        const up = data.uptime || 0;
+        const h = Math.floor(up / 3600);
+        const m = Math.floor((up % 3600) / 60);
+        document.getElementById('stat-runtime').textContent = `${h}h ${m}m`;
+
+        const avg = data.avgUptime || 0;
+        const am = Math.floor(avg / 60);
+        document.getElementById('stat-avg').textContent = `${am}m`;
+
+        // Active list
+        const list = document.getElementById('active-list');
+        if (data.activeNumbers && data.activeNumbers.length > 0) {
+            list.innerHTML = data.activeNumbers.map(n =>
+                `<div class="active-item">
+                    <span class="num">${n}</span>
+                    <span class="time">🟢 online</span>
+                </div>`
+            ).join('');
+        } else {
+            list.innerHTML = '<div class="empty-state">No active bots right now</div>';
+        }
+    } catch (e) {
+        console.log('Stats fetch failed');
+    }
+}
+
+fetchStats();
+setInterval(fetchStats, 15000); // every 15s
+
+// ==========================================
+// 🔴 LOAD CONFIG FROM SERVER
+// ==========================================
+async function loadConfig() {
+    try {
+        const res = await fetch('/pair/config');
+        const data = await res.json();
+        if (data.botImageUrl && data.botImageUrl.startsWith('http')) {
+            document.getElementById('logo-img').src = data.botImageUrl;
+        }
+        if (data.botName) {
+            document.title = `${data.botName} | Pair WhatsApp Bot`;
+        }
+    } catch (e) {}
+}
+loadConfig();
+</script>
+</body>
+</html>
