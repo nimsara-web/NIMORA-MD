@@ -679,6 +679,25 @@ router.get('/stats', async (req, res) => {
             if (start) totalUptime += (Date.now() - start);
         });
 
+
+        // Config for website
+router.get('/config', async (req, res) => {
+    res.json({
+        botName: config.botName,
+        botImageUrl: config.botImageUrl,
+        botAudioUrl: config.botAudioUrl,
+        websiteLogoUrl: config.websiteLogoUrl,
+        channelLink: config.channelLink,
+        websiteUrl: config.websiteUrl,
+        supportNumber: config.supportNumber,
+        ownerName: config.ownerName
+    });
+});
+
+
+
+        
+
         res.json({
             botName: config.botName,
             creator: config.ownerName,
