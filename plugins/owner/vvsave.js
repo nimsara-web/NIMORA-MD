@@ -1,14 +1,13 @@
 /**
- * NIMORA MD - Silent ViewOnce Save
+ * NIMORA MD - Silent ViewOnce Save (Manual)
  * Category: owner
  * 
- * Saves view-once media to bot's own self-chat WITHOUT notifying the sender.
- * Owner-only feature with on/off toggle and custom reaction.
+ * Manually save view-once media to bot self-chat.
+ * Usage: Reply to view-once media with .vvsave
  */
 
 const pino = require('pino');
 const { downloadMediaMessage } = require('baileys');
-const config = require('../../config');
 
 module.exports = {
     name: 'vvsave',
@@ -18,7 +17,8 @@ module.exports = {
 
     async execute(ctx) {
         const {
-            socket, msg, reply, sender, number, isOwner,
+            socket, msg, reply, sender, number,
+            isOwner, isMainOwner,
             get, input, handleSettingUpdate,
             unwrapMessage, getMediaType, FOOTER
         } = ctx;
@@ -26,7 +26,7 @@ module.exports = {
         // ==========================================
         // 👑 OWNER CHECK
         // ==========================================
-        if (!isOwner) {
+        if (!isOwner && !isMainOwner) {
             return reply(`⚠️ *Only Bot Owner!*${FOOTER}`);
         }
 
@@ -48,7 +48,7 @@ module.exports = {
 💾 Media will be saved silently to bot's self-chat.
 👤 Sender will NOT be notified.
 
-💡 Reply to view-once media with \`.vvsave\` to save it.${FOOTER}`);
+💡 Reply to view-once media with \`.vvsave\`${FOOTER}`);
             } else {
                 await reply(`❌ *VVSave DISABLED*${FOOTER}`);
             }
@@ -70,12 +70,15 @@ module.exports = {
         }
 
         // ==========================================
-        // 📊 STATUS (also default when no args)
+        // 📊 STATUS
         // ==========================================
         const quoted = msg.message?.extendedTextMessage?.contextInfo;
         const hasQuotedMedia = quoted?.quotedMessage &&
-            (quoted.quotedMessage.imageMessage || quoted.quotedMessage.videoMessage ||
-             quoted.quotedMessage.viewOnceMessage || quoted.quotedMessage.viewOnceMessageV2);
+            (quoted.quotedMessage.imageMessage ||
+             quoted.quotedMessage.videoMessage ||
+             quoted.quotedMessage.viewOnceMessage ||
+             quoted.quotedMessage.viewOnceMessageV2 ||
+             quoted.quotedMessage.viewOnceMessageV2Extension);
 
         if (action === 'status' || (!action && !hasQuotedMedia)) {
             const enabled = await get('VVSAVE_ENABLED', number) || 'off';
@@ -83,16 +86,16 @@ module.exports = {
 
             return reply(`📊 *VVSAVE STATUS*
 
-🔘 *Status:* ${enabled === 'on' ? '✅ ON' : '❌ OFF'}
+🔘 *Manual Status:* ${enabled === 'on' ? '✅ ON' : '❌ OFF'}
 🎯 *Emoji:* ${emoji}
 
 *Commands:*
-• \`.vvsave on [emoji]\` - Enable
+• \`.vvsave on [emoji]\` - Enable manual
 • \`.vvsave off\` - Disable
-• \`.vvsave status\` - Check status
 • \`.vvsave emoji [emoji]\` - Change emoji
+• \`.vvsaveauto on\` - Auto-save mode
 
-💡 *How to use:* Reply to a view-once media with \`.vvsave\`${FOOTER}`);
+💡 *Usage:* Reply to a view-once media with \`.vvsave\`${FOOTER}`);
         }
 
         // ==========================================
@@ -100,7 +103,10 @@ module.exports = {
         // ==========================================
         const enabled = await get('VVSAVE_ENABLED', number) || 'off';
         if (enabled !== 'on' && action !== 'force') {
-            return reply(`❌ *VVSave is disabled.*\n\n💡 Enable with: \`.vvsave on\`${FOOTER}`);
+            return reply(`❌ *VVSave is disabled.*
+
+💡 Enable with: \`.vvsave on\`
+💡 හෝ auto-save සඳහා: \`.vvsaveauto on\`${FOOTER}`);
         }
 
         // ==========================================
@@ -126,7 +132,7 @@ module.exports = {
         }
 
         // ==========================================
-        // 🔕 REACT (with custom emoji) - NO REPLY
+        // 🔕 REACT (silent acknowledgment)
         // ==========================================
         const emoji = await get('VVSAVE_EMOJI', number) || '👀';
         try {
@@ -160,14 +166,14 @@ module.exports = {
             );
 
             if (!buffer || buffer.length === 0) {
-                console.log('[VVSAVE] ❌ Download failed (empty buffer)');
+                console.log('[VVSAVE] ❌ Download failed (empty)');
                 return;
             }
 
             console.log(`[VVSAVE] ✅ Downloaded ${buffer.length} bytes`);
 
             // ==========================================
-            // 🎯 SEND TO BOT'S OWN SELF-CHAT (SILENT!)
+            // 🎯 SEND TO BOT'S SELF-CHAT
             // ==========================================
             const selfJid = `${number}@s.whatsapp.net`;
 
