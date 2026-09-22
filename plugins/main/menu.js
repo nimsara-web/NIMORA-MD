@@ -22,7 +22,8 @@ const CATEGORIES = {
         commands: [
             'mp3tourl', 'dark', 'blur', 'toaudio', 'toptt', 'remini',
             'img2qr', 'removebg', 'toqr', 'subtr', 'splitmedia', 'surl',
-            'tts', 'wame', 'img2url', 'fancy', 'trt', 'toimg', 'pdf', 'emomix'
+            'tts', 'wame', 'img2url', 'fancy', 'trt', 'singlish',
+            'toimg', 'pdf', 'emomix'
         ]
     },
     2: {
