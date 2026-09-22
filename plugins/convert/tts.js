@@ -2,28 +2,28 @@
  * NIMORA MD - Text to Speech (TTS)
  * Category: convert
  * 
- * Converts text → MP3 (Google TTS) → OGG Opus (ffmpeg) → WhatsApp voice note
+ * Pipeline: Text → Google TTS (MP3) → FFmpeg (OGG Opus) → WhatsApp Voice Note
  */
 
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
+const { exec } = require('util').promisify(require('child_process').exec);
 
 // ==========================================
-// 🎬 Get FFmpeg path (from @ffmpeg-installer or system)
+// 🎬 FFmpeg path (from @ffmpeg-installer)
 // ==========================================
 let FFMPEG_PATH = 'ffmpeg';
 try {
-    const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-    FFMPEG_PATH = ffmpegInstaller.path;
-    console.log('[TTS] ✅ Using ffmpeg from @ffmpeg-installer');
+    FFMPEG_PATH = require('@ffmpeg-installer/ffmpeg').path;
+    console.log('[TTS] ✅ FFmpeg loaded:', FFMPEG_PATH);
 } catch (e) {
-    console.log('[TTS] ⚠️ Using system ffmpeg (may not work on Render)');
+    console.log('[TTS] ⚠️ @ffmpeg-installer not found, using system ffmpeg');
 }
 
+// ==========================================
+// 🎤 TTS Command
+// ==========================================
 module.exports = {
     name: 'tts',
     aliases: ['say', 'speak'],
@@ -33,25 +33,31 @@ module.exports = {
     async execute(ctx) {
         const { args, reply, socket, msg, sender, channelContext, FOOTER } = ctx;
 
-        const text = args.join(' ');
+        const text = args.join(' ').trim();
         if (!text) return reply(`⚠️ Usage: .tts [text]${FOOTER}`);
+
+        if (text.length > 180) {
+            return reply(`⚠️ *Text too long!*
+
+📏 Max: 180 characters
+📝 Yours: ${text.length}${FOOTER}`);
+        }
 
         await reply(`🎤 Generating voice... ⏳${FOOTER}`);
 
-        // Setup tmp directory
+        // Temp paths
         const tmpDir = path.join(__dirname, '../../tmp');
         await fs.ensureDir(tmpDir);
 
-        const timestamp = Date.now();
-        const mp3Path = path.join(tmpDir, `tts_${timestamp}.mp3`);
-        const oggPath = path.join(tmpDir, `tts_${timestamp}.ogg`);
+        const ts = Date.now();
+        const mp3Path = path.join(tmpDir, `tts_${ts}.mp3`);
+        const oggPath = path.join(tmpDir, `tts_${ts}.ogg`);
 
         try {
             // ==========================================
-            // 1️⃣ Generate MP3 from Google TTS
+            // 1️⃣ Fetch MP3 from Google TTS
             // ==========================================
-            const cleanText = text.substring(0, 180);
-            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=en&client=tw-ob`;
+            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
 
             const res = await axios.get(ttsUrl, {
                 responseType: 'arraybuffer',
@@ -68,32 +74,33 @@ module.exports = {
 
             if (!mp3Buffer || mp3Buffer.length < 500) {
                 console.log(`[TTS] ❌ MP3 too small: ${mp3Buffer?.length || 0} bytes`);
-                return reply(`❌ TTS failed (audio too small)!${FOOTER}`);
+                return reply(`❌ TTS failed (empty audio)!${FOOTER}`);
             }
 
-            console.log(`[TTS] ✅ Got MP3: ${mp3Buffer.length} bytes`);
-
-            // Save MP3 to disk
+            console.log(`[TTS] ✅ MP3 fetched: ${mp3Buffer.length} bytes`);
             await fs.writeFile(mp3Path, mp3Buffer);
 
             // ==========================================
-            // 2️⃣ Convert MP3 → OGG Opus (voice note format)
+            // 2️⃣ Convert MP3 → OGG Opus
             // ==========================================
-            try {
-                const ffmpegCmd = `"${FFMPEG_PATH}" -i "${mp3Path}" -c:a libopus -b:a 48k -ar 48000 -ac 1 -vbr on -compression_level 10 -frame_duration 60 -application voip "${oggPath}" -y`;
+            const ffmpegCmd = `"${FFMPEG_PATH}" -i "${mp3Path}" ` +
+                `-c:a libopus -b:a 48k -ar 48000 -ac 1 ` +
+                `-vbr on -compression_level 10 -frame_duration 60 ` +
+                `-application voip "${oggPath}" -y`;
 
-                console.log(`[TTS] 🎬 Converting to OGG Opus...`);
-                await execPromise(ffmpegCmd, { timeout: 30000 });
+            console.log(`[TTS] 🎬 Converting to OGG Opus...`);
+
+            try {
+                await exec(ffmpegCmd, { timeout: 30000 });
 
                 const oggBuffer = await fs.readFile(oggPath);
 
                 if (!oggBuffer || oggBuffer.length < 500) {
-                    console.log(`[TTS] ❌ OGG too small: ${oggBuffer?.length || 0} bytes`);
-                    // Fallback: send MP3 as regular audio (not PTT)
-                    return await sendFallbackMp3(socket, sender, msg, mp3Buffer, channelContext, FOOTER);
+                    console.log(`[TTS] ⚠️ OGG too small, using MP3 fallback`);
+                    return await sendMp3Fallback(socket, sender, msg, mp3Buffer, channelContext, FOOTER);
                 }
 
-                console.log(`[TTS] ✅ Got OGG Opus: ${oggBuffer.length} bytes`);
+                console.log(`[TTS] ✅ OGG Opus: ${oggBuffer.length} bytes`);
 
                 // ✅ Send as voice note (PTT)
                 await socket.sendMessage(sender, {
@@ -103,12 +110,12 @@ module.exports = {
                     contextInfo: channelContext
                 }, { quoted: msg });
 
-                console.log(`[TTS] ✅ Sent voice note successfully`);
+                console.log(`[TTS] ✅ Voice note sent`);
 
             } catch (ffmpegErr) {
                 console.error(`[TTS] ❌ FFmpeg failed:`, ffmpegErr.message);
-                // Fallback: send MP3 as regular audio
-                await sendFallbackMp3(socket, sender, msg, mp3Buffer, channelContext, FOOTER);
+                // Fallback: MP3
+                await sendMp3Fallback(socket, sender, msg, mp3Buffer, channelContext, FOOTER);
             }
 
         } catch (e) {
@@ -116,22 +123,22 @@ module.exports = {
             await reply(`❌ TTS failed: ${e.message}${FOOTER}`);
         } finally {
             // Cleanup temp files
-            await fs.remove(mp3Path).catch(() => {});
-            await fs.remove(oggPath).catch(() => {});
+            fs.remove(mp3Path).catch(() => {});
+            fs.remove(oggPath).catch(() => {});
         }
     }
 };
 
 // ==========================================
-// 🔁 Fallback: Send MP3 as regular audio (not PTT)
+// 🔁 Fallback: Send MP3 as regular audio
 // ==========================================
-async function sendFallbackMp3(socket, sender, msg, mp3Buffer, channelContext, FOOTER) {
+async function sendMp3Fallback(socket, sender, msg, mp3Buffer, channelContext, FOOTER) {
     try {
-        console.log(`[TTS] 🔁 Fallback: sending MP3 as regular audio`);
+        console.log(`[TTS] 🔁 Fallback: sending MP3 (regular audio)`);
         await socket.sendMessage(sender, {
             audio: mp3Buffer,
             mimetype: 'audio/mpeg',
-            ptt: false,                  // ← Regular audio file, not voice note
+            ptt: false,
             fileName: 'tts.mp3',
             contextInfo: channelContext
         }, { quoted: msg });
