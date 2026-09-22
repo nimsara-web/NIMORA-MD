@@ -1,5 +1,10 @@
 const config = require('../../config');
 
+// Lazy require to avoid circular dependency
+function getPair() {
+    return require('../../pair');
+}
+
 module.exports = {
     name: 'alive',
     aliases: ['status'],
@@ -7,7 +12,12 @@ module.exports = {
     description: 'Check if bot is alive',
 
     async execute(ctx) {
-        const { socket, msg, reply, number, sender, socketCreationTime, channelContext, FOOTER } = ctx;
+        const { socket, msg, reply, number, sender, channelContext, FOOTER } = ctx;
+
+        // ✅ Get socketCreationTime directly from pair module
+        const pair = getPair();
+        const socketCreationTime = pair.socketCreationTime || new Map();
+        const activeSockets = pair.activeSockets || new Map();
 
         const botName = (await ctx.get('BOT_NAME', number)) || config.botName;
         const start = socketCreationTime.get(number) || Date.now();
@@ -19,12 +29,14 @@ module.exports = {
         const aliveText = `👋 *${botName}* is online!
 
 ⏱️ *Uptime:* ${h}h ${m}m ${s}s
+📊 *Active Bots:* ${activeSockets.size}
 👨‍💻 *Creator:* Nimsara
 📞 *Support:* +${config.supportNumber}
 
 > 🔗 Web: ${config.websiteUrl}
 > 📢 Channel: ${config.channelLink}${FOOTER}`;
 
+        // Send image, fallback to text
         try {
             await socket.sendMessage(sender, {
                 image: { url: config.botImageUrl },
@@ -32,13 +44,17 @@ module.exports = {
                 contextInfo: channelContext
             }, { quoted: msg });
         } catch (e) {
-            await reply(aliveText);
+            try {
+                await reply(aliveText);
+            } catch (e2) {
+                console.error('[ALIVE] Failed to send:', e2.message);
+            }
         }
 
-        // Send audio
+        // Send audio (optional, fail silently)
         await ctx.delay(1200);
         try {
-            if (config.botAudioUrl) {
+            if (config.botAudioUrl && config.botAudioUrl.startsWith('http')) {
                 await socket.sendMessage(sender, {
                     audio: { url: config.botAudioUrl },
                     mimetype: 'audio/mpeg',
@@ -46,6 +62,8 @@ module.exports = {
                     contextInfo: channelContext
                 }, { quoted: msg });
             }
-        } catch (e) {}
+        } catch (e) {
+            console.log('[ALIVE] Audio send failed (ignored):', e.message);
+        }
     }
 };
