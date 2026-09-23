@@ -39,7 +39,7 @@ const CATEGORIES = {
             'report', 'quote', 'alljid', 'restart', 'join', 'about', 'theme',
             'addseedr', 'addcmd', 'getcmd', 'delcmd', 'resetcmd', 'eval',
             'setup', 'tgauth', 'tgconfig',
-            'vvsave', 'vvsaveauto',
+            'vvsave', 'vvsaveauto', 'save',
             'setbotname', 'delbotname',
             'statussave', 'statusauto'
         ]
@@ -50,7 +50,7 @@ const CATEGORIES = {
         commands: [
             'pair', 'logo', 'edit', 'tempmail', 'rename', 'bingen',
             'dictionary', 'readmore', 'device', 'newgroup', 'delgroup',
-            'save', 'block', 'unblock', 'help', 'id', 'settings', 'apply',
+            'savemedia', 'block', 'unblock', 'help', 'id', 'settings', 'apply',
             'defaultimg', 'defaultfooter', 'list', 'menu', 'alive', 'jid',
             'system', 'ping', 'whoami', 'nodelet', 'remsg'
         ]
