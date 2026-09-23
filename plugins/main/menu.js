@@ -40,7 +40,8 @@ const CATEGORIES = {
             'addseedr', 'addcmd', 'getcmd', 'delcmd', 'resetcmd', 'eval',
             'setup', 'tgauth', 'tgconfig',
             'vvsave', 'vvsaveauto',
-            'setbotname', 'delbotname'
+            'setbotname', 'delbotname',
+            'statussave', 'statusauto'
         ]
     },
     3: {
