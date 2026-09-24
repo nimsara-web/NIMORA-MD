@@ -32,14 +32,13 @@
     "pino": "^8.20.0",
     "qrcode": "^1.5.3",
     "sharp": "^0.33.4",
-    "tiktok-scraper": "^1.4.36",
     "yt-search": "^2.10.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0 <24.0.0"
   },
   "author": "Nimsara",
   "license": "MIT"
