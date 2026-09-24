@@ -144,7 +144,7 @@ async function useMongoDBAuthState(number) {
 }
 
 // ==========================================
-// 🧠 COMMAND CONTEXT BUILDER (FULLY SECURED)
+// 🧠 COMMAND CONTEXT BUILDER (FIXED)
 // ==========================================
 function buildContext(socket, msg, number, body, reply) {
     const sender = msg.key.remoteJid;
@@ -157,56 +157,49 @@ function buildContext(socket, msg, number, body, reply) {
     const command = args.shift()?.toLowerCase() || '';
 
     // ==========================================
-    // 🔒 STRICT OWNER PERMISSION LOGIC
+    // 🔒 OWNER PERMISSION LOGIC (FIXED)
     // ==========================================
-    // KEY: A user who pairs the bot with their number
-    //       DOES NOT become an owner.
+    // Bot Owner = The person who paired the bot
+    //           = Bot's number (e.g., 94771234567)
     //
-    // Owner criteria (STRICT):
-    //   1. senderNumber must be in OWNER_LIST
-    //   2. OR (message is from bot itself AND the bot number is in OWNER_LIST)
+    // Main Owner = 94784280074 (only 2 numbers)
+    //            = Can change bot name/logo
     //
-    // NOT OWNER:
-    //   - User who paired the bot with their number (not in OWNER_LIST)
-    //   - Random users messaging the bot
+    // Examples:
+    //   94771234567 (paired bot) → isOwner: ✅, isMainOwner: ❌
+    //   94784280074 (main)       → isOwner: ✅, isMainOwner: ✅
+    //   Random user              → isOwner: ❌, isMainOwner: ❌
     // ==========================================
 
     const isFromBot = msg.key.fromMe === true;
+    const botNumber = number; // Bot's number
 
-    // Check sender number (who sent the message)
-    const senderIsOwner = isOwnerNumber(senderNumber);
+    // ==========================================
+    // 1️⃣ BOT OWNER CHECK
+    // ==========================================
+    // The bot owner is: the number that paired the bot
+    //   - If senderNumber === botNumber → bot owner
+    //   - If message is from bot itself (self-chat) → bot owner
+
+    const isSenderBotOwner = (senderNumber === botNumber);
+    const isFromBotOwner = isFromBot && botNumber && botNumber.length > 0;
+
+    // Also check dynamic owner list (.nimcmd add)
+    const isInOwnerList = isOwnerNumber(senderNumber);
+    const isBotInOwnerList = isOwnerNumber(botNumber);
+
+    // FINAL: isOwner = bot owner OR in owner list
+    const finalIsOwner = isSenderBotOwner || isFromBotOwner || isInOwnerList || isBotInOwnerList;
+
+    // ==========================================
+    // 2️⃣ MAIN OWNER CHECK
+    // ==========================================
+    // Only 94784280074 and 94701726411 are main owners
+    // Main owners can change bot name/logo
+
     const senderIsMainOwner = isMainOwnerNumber(senderNumber);
+    const botIsMainOwner = isMainOwnerNumber(botNumber);
 
-    // Check the bot's own number
-    const botIsOwner = isOwnerNumber(number);
-    const botIsMainOwner = isMainOwnerNumber(number);
-
-    // ==========================================
-    // FINAL PERMISSION DECISION
-    // ==========================================
-    // isOwner = sender is owner
-    //         OR (message from bot AND bot number is owner)
-    //
-    // Example 1: 94784280074 (owner) sends .setbotname
-    //   → isFromBot = false, senderIsOwner = true
-    //   → finalIsOwner = true ✅
-    //
-    // Example 2: 94784280074 (owner) uses bot self-chat .setbotname
-    //   → isFromBot = true, senderNumber = 94784280074
-    //   → senderIsOwner = true → finalIsOwner = true ✅
-    //
-    // Example 3: 94771234567 (random user, paired bot) uses .setbotname
-    //   → isFromBot = true, senderNumber = 94771234567
-    //   → senderIsOwner = false, botIsOwner = false
-    //   → finalIsOwner = false ✅
-    //
-    // Example 4: 94771234567 messages bot directly
-    //   → isFromBot = false, senderNumber = 94771234567
-    //   → senderIsOwner = false
-    //   → finalIsOwner = false ✅
-    // ==========================================
-
-    const finalIsOwner = senderIsOwner || (isFromBot && botIsOwner);
     const finalIsMainOwner = senderIsMainOwner || (isFromBot && botIsMainOwner);
 
     return {
@@ -221,11 +214,21 @@ function buildContext(socket, msg, number, body, reply) {
         channelContext: getChannelContext(),
         isOwner: finalIsOwner,
         isMainOwner: finalIsMainOwner,
+        // Also expose bot number for easy access
+        botNumber: botNumber,
+        isBotOwner: isSenderBotOwner || isFromBotOwner,
         _debug: {
-            senderNumber, botNumber: number, isFromBot,
-            senderIsOwner, senderIsMainOwner,
-            botIsOwner, botIsMainOwner,
-            finalIsOwner, finalIsMainOwner
+            senderNumber,
+            botNumber,
+            isFromBot,
+            isSenderBotOwner,
+            isFromBotOwner,
+            isInOwnerList,
+            isBotInOwnerList,
+            senderIsMainOwner,
+            botIsMainOwner,
+            finalIsOwner,
+            finalIsMainOwner
         },
         activeSockets, socketCreationTime, reconnectAttempts,
         messageCache, menuMessageIds, pendingSelection, deletedMessages,
