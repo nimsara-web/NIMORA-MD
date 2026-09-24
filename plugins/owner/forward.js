@@ -1,5 +1,21 @@
 /**
- * NIMORA MD - Forward Command (LID FIXED)
+ * NIMORA MD - Forward Command
+ * Category: owner
+ * 
+ * Forward a replied message to any chat/status/channel.
+ * Supports LARGE files (movies, documents) and audio status.
+ * 
+ * Usage:
+ *   Reply + .forward [target] [options]
+ * 
+ * Examples:
+ *   .forward 94784280074              → Number
+ *   .forward 120363362308230584@newsletter  → Channel
+ *   .forward 123456789-123456@g.us   → Group
+ *   .forward mystatus                 → MY status (image/video)
+ *   .forward mystatus audio           → Audio to status
+ * 
+ * OWNER ONLY
  */
 
 const pino = require('pino');
@@ -20,21 +36,26 @@ module.exports = {
             channelContext, FOOTER
         } = ctx;
 
+        // ==========================================
         // 🔍 DEBUG
+        // ==========================================
         console.log(`\n[FORWARD] ═══════════════════════════`);
-        console.log(`[FORWARD] 🚀 Command triggered`);
         console.log(`[FORWARD] Args:`, args);
         console.log(`[FORWARD] Sender:`, sender);
         console.log(`[FORWARD] SenderNumber:`, senderNumber);
         console.log(`[FORWARD] BotNumber:`, number);
         console.log(`[FORWARD] isOwner:`, isOwner, '| isMainOwner:', isMainOwner);
 
+        // ==========================================
         // 🔒 OWNER CHECK
+        // ==========================================
         if (!isOwner && !isMainOwner) {
             return reply(`⚠️ *Owner Only!*${FOOTER}`);
         }
 
+        // ==========================================
         // 📌 PARSE TARGET
+        // ==========================================
         const target = args[0]?.toLowerCase();
 
         if (!target) {
@@ -50,30 +71,39 @@ module.exports = {
 • \`.forward 123456@g.us\` — Group${FOOTER}`);
         }
 
+        // ==========================================
         // 📥 QUOTED MESSAGE
+        // ==========================================
         const quoted = msg.message?.extendedTextMessage?.contextInfo;
         if (!quoted || !quoted.quotedMessage) {
             return reply(`⚠️ *Please reply to a message!*${FOOTER}`);
         }
 
+        // ==========================================
         // 🎯 NORMALIZE TARGET
+        // ==========================================
         let targetJid = target;
         const isStatusTarget = ['mystatus', 'status', 'story'].includes(target);
         const forceAudioStatus = args[1]?.toLowerCase() === 'audio';
 
         if (!isStatusTarget) {
             if (targetJid.includes('@')) {
+                // Already JID format
                 console.log(`[FORWARD] JID as-is: ${targetJid}`);
             } else if (/^[0-9]+$/.test(targetJid)) {
+                // Pure number
                 targetJid = `${targetJid}@s.whatsapp.net`;
             } else if (/^[0-9-]+$/.test(targetJid)) {
+                // Number-dash-number (group)
                 targetJid = `${targetJid}@g.us`;
             }
         }
 
         console.log(`[FORWARD] Final targetJid: ${targetJid}`);
 
+        // ==========================================
         // 📝 EXTRACT CONTENT
+        // ==========================================
         const qMsg = unwrapMessage(quoted.quotedMessage);
         if (!qMsg) return reply(`❌ *Could not read quoted message!*${FOOTER}`);
 
@@ -84,6 +114,9 @@ module.exports = {
                            qMsg.videoMessage?.caption ||
                            qMsg.documentMessage?.caption ||
                            '';
+
+        console.log(`[FORWARD] MediaInfo:`, mediaInfo ? mediaInfo.type : 'text');
+        console.log(`[FORWARD] Text length:`, textContent.length);
 
         const targetDesc = isStatusTarget
             ? `📸 MY STATUS${forceAudioStatus ? ' (Audio)' : ''}`
@@ -115,14 +148,9 @@ module.exports = {
                     return reply(`❌ *Status only supports Image/Video/Audio!*${FOOTER}`);
                 }
 
-                // ==========================================
-                // 🎯 FIX: Use BOT number, not senderNumber
-                // ==========================================
-                // WhatsApp LID system: senderNumber might be @lid (invalid)
-                // Status එක bot number එකේ, ඒ නිසා bot number use කරන්න
+                // 🎯 Use BOT number (not senderNumber which might be @lid)
                 const statusJidList = [`${number}@s.whatsapp.net`];
-
-                console.log(`[FORWARD] 📸 Status target: ${statusJidList.join(', ')}`);
+                console.log(`[FORWARD] Status target: ${statusJidList.join(', ')}`);
 
                 // ==========================================
                 // 🎵 AUDIO STATUS
@@ -221,7 +249,7 @@ module.exports = {
             }
 
             // ==========================================
-            // 📱 NORMAL TARGET (number/group/channel)
+            // 📱 NORMAL TARGET
             // ==========================================
             // TEXT
             if (!mediaInfo) {
@@ -236,7 +264,8 @@ module.exports = {
                     contextInfo: channelContext
                 });
 
-                console.log(`[FORWARD] ✅ Send:`, sent?.key?.id || 'NO ID');
+                console.log(`[FORWARD] ✅ Sent:`, sent?.key?.id || 'NO ID');
+                console.log(`[FORWARD] ═══════════════════════════\n`);
 
                 return reply(`✅ *Forwarded!*
 
@@ -341,6 +370,9 @@ module.exports = {
     }
 };
 
+// ==========================================
+// 🔧 HELPER: Format bytes
+// ==========================================
 function formatBytes(bytes, decimals = 2) {
     if (!bytes || bytes === 0) return '0 Bytes';
     const k = 1024;
