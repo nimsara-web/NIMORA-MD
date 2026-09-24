@@ -144,7 +144,7 @@ async function useMongoDBAuthState(number) {
 }
 
 // ==========================================
-// 🧠 COMMAND CONTEXT BUILDER (SECURITY FIXED)
+// 🧠 COMMAND CONTEXT BUILDER (FULLY SECURED)
 // ==========================================
 function buildContext(socket, msg, number, body, reply) {
     const sender = msg.key.remoteJid;
@@ -159,33 +159,53 @@ function buildContext(socket, msg, number, body, reply) {
     // ==========================================
     // 🔒 STRICT OWNER PERMISSION LOGIC
     // ==========================================
-    // IMPORTANT: A user who pairs the bot with their number
-    // does NOT become an owner. Only numbers in OWNER_LIST
-    // (main owners + explicitly added) are owners.
+    // KEY: A user who pairs the bot with their number
+    //       DOES NOT become an owner.
     //
-    // Owner check:
-    //   1. Sender is in OWNER_LIST (dynamic owner list)
-    //   2. OR sender is in config.mainOwnerNumbers
-    //   3. OR message from bot itself AND bot number is in OWNER_LIST
+    // Owner criteria (STRICT):
+    //   1. senderNumber must be in OWNER_LIST
+    //   2. OR (message is from bot itself AND the bot number is in OWNER_LIST)
     //
-    // NON-OWNER:
-    //   - User who paired bot with their number is NOT owner
-    //   - Even if they use bot's self-chat, they are NOT owner
+    // NOT OWNER:
+    //   - User who paired the bot with their number (not in OWNER_LIST)
+    //   - Random users messaging the bot
     // ==========================================
 
     const isFromBot = msg.key.fromMe === true;
 
-    // Check sender number
+    // Check sender number (who sent the message)
     const senderIsOwner = isOwnerNumber(senderNumber);
     const senderIsMainOwner = isMainOwnerNumber(senderNumber);
 
-    // Check bot number (bot might be owned by an owner)
+    // Check the bot's own number
     const botIsOwner = isOwnerNumber(number);
     const botIsMainOwner = isMainOwnerNumber(number);
 
-    // FINAL PERMISSIONS
-    // Owner = sender in owner list
-    //       OR (msg from bot AND bot number in owner list)
+    // ==========================================
+    // FINAL PERMISSION DECISION
+    // ==========================================
+    // isOwner = sender is owner
+    //         OR (message from bot AND bot number is owner)
+    //
+    // Example 1: 94784280074 (owner) sends .setbotname
+    //   → isFromBot = false, senderIsOwner = true
+    //   → finalIsOwner = true ✅
+    //
+    // Example 2: 94784280074 (owner) uses bot self-chat .setbotname
+    //   → isFromBot = true, senderNumber = 94784280074
+    //   → senderIsOwner = true → finalIsOwner = true ✅
+    //
+    // Example 3: 94771234567 (random user, paired bot) uses .setbotname
+    //   → isFromBot = true, senderNumber = 94771234567
+    //   → senderIsOwner = false, botIsOwner = false
+    //   → finalIsOwner = false ✅
+    //
+    // Example 4: 94771234567 messages bot directly
+    //   → isFromBot = false, senderNumber = 94771234567
+    //   → senderIsOwner = false
+    //   → finalIsOwner = false ✅
+    // ==========================================
+
     const finalIsOwner = senderIsOwner || (isFromBot && botIsOwner);
     const finalIsMainOwner = senderIsMainOwner || (isFromBot && botIsMainOwner);
 
@@ -205,6 +225,7 @@ function buildContext(socket, msg, number, body, reply) {
             senderNumber, botNumber: number, isFromBot,
             senderIsOwner, senderIsMainOwner,
             botIsOwner, botIsMainOwner,
+            finalIsOwner, finalIsMainOwner
         },
         activeSockets, socketCreationTime, reconnectAttempts,
         messageCache, menuMessageIds, pendingSelection, deletedMessages,
@@ -569,7 +590,6 @@ function setupStatusAndPresenceHandlers(socket, number) {
 
             const botNum = getBotNumber();
 
-            // Auto-view
             try {
                 const autoView = await get('AUTO_VIEW_STATUS', botNum);
                 if (autoView !== 'false' && autoView !== 'off') {
@@ -577,7 +597,6 @@ function setupStatusAndPresenceHandlers(socket, number) {
                 }
             } catch (e) {}
 
-            // Auto-like
             try {
                 const autoLike = await get('AUTO_LIKE_STATUS', botNum);
                 if (autoLike === 'true' || autoLike === 'on') {
@@ -588,7 +607,6 @@ function setupStatusAndPresenceHandlers(socket, number) {
                 }
             } catch (e) {}
 
-            // Auto-save
             try {
                 const autoSave = await get('STATUS_AUTO', botNum);
                 if (autoSave !== 'on') continue;
