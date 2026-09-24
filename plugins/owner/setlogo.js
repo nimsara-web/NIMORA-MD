@@ -16,21 +16,36 @@ module.exports = {
 
     async execute(ctx) {
         const {
-            args, reply, isMainOwner,
+            args, reply, isMainOwner, isOwner,
             get, input, number, FOOTER
         } = ctx;
 
-        // 🔒 MAIN OWNER ONLY
+        // ==========================================
+        // 🔒 STRICT MAIN OWNER CHECK
+        // ==========================================
         if (!isMainOwner) {
+            const mainOwners = (config.mainOwnerNumbers || [])
+                .map(n => `• +${n}`).join('\n') || '• 94784280074';
+
             return reply(`⚠️ *Access Denied!*
 
-💡 Only MAIN bot owner can change bot logo.
+💡 Only MAIN bot owner can change the bot logo.
 
-📞 Contact: 0784280074${FOOTER}`);
+🔒 *Main Owners:*
+${mainOwners}
+
+📞 Contact: 0784280074
+
+🔍 *Your status:*
+• isOwner: ${isOwner ? '✅' : '❌'}
+• isMainOwner: ${isMainOwner ? '✅' : '❌'}${FOOTER}`);
         }
 
         const logoUrl = args[0];
 
+        // ==========================================
+        // 📊 SHOW CURRENT (no URL)
+        // ==========================================
         if (!logoUrl) {
             const current = await get('BOT_LOGO', number) || config.botImageUrl;
             return reply(`🖼️ *BOT LOGO SETTINGS*
@@ -39,37 +54,36 @@ module.exports = {
 
 *Usage:* \`.setlogo [image_url]\`
 
-💡 Must be a direct image URL
+💡 *Direct image URL:*
 • https://example.com/logo.jpg
-• https://i.ibb.co/xxx/logo.png${FOOTER}`);
+• https://i.ibb.co/xxx/logo.png
+• https://github.com/.../logo.png${FOOTER}`);
         }
 
+        // ==========================================
+        // ⚠️ VALIDATION
+        // ==========================================
         if (!logoUrl.startsWith('http')) {
             return reply(`❌ *Invalid URL!*
 
 💡 Must start with http:// or https://${FOOTER}`);
         }
 
-        // Validate image URL
-        const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.jfif'];
-        const lowerUrl = logoUrl.toLowerCase();
-        const isValid = validExtensions.some(ext => lowerUrl.includes(ext)) ||
-                        lowerUrl.includes('github') ||
-                        lowerUrl.includes('ibb.co') ||
-                        lowerUrl.includes('catbox');
-
-        if (!isValid) {
-            return reply(`⚠️ *URL might not be an image*
-
-💡 Continue anyway? Send:
-\`.setlogo ${logoUrl} force\``);
-        }
-
-        await input('BOT_LOGO', logoUrl, number);
-        await reply(`✅ *Bot logo updated!*
+        // ==========================================
+        // 💾 SAVE
+        // ==========================================
+        try {
+            await input('BOT_LOGO', logoUrl, number);
+            await reply(`✅ *Bot logo updated!*
 
 🖼️ *URL:* ${logoUrl}
 
-💡 Restart bot to see change.${FOOTER}`);
+💡 Restart bot to see the change.${FOOTER}`);
+
+            console.log(`[SETLOGO] ✅ Logo changed by ${ctx.senderNumber}`);
+        } catch (e) {
+            console.error(`[SETLOGO] Error:`, e.message);
+            await reply(`❌ *Failed:* ${e.message}${FOOTER}`);
+        }
     }
 };
