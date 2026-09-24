@@ -1,14 +1,6 @@
 /**
  * NIMORA MD - Bot Mode
  * Category: main
- * 
- * Control bot's response mode:
- *   public  → Everyone (groups + inbox)
- *   group   → Only groups
- *   inbox   → Only inbox (DM)
- *   private → Only owner
- * 
- * OWNER ONLY (bot owner + main owner)
  */
 
 const config = require('../../config');
@@ -22,12 +14,10 @@ module.exports = {
     async execute(ctx) {
         const {
             args, reply, isOwner, isMainOwner,
-            get, handleSettingUpdate, number, senderNumber, FOOTER
+            get, input, number, senderNumber, FOOTER
         } = ctx;
 
-        // ==========================================
         // 🔒 OWNER CHECK
-        // ==========================================
         if (!isOwner && !isMainOwner) {
             return reply(`⚠️ *Owner Only!*${FOOTER}`);
         }
@@ -35,9 +25,7 @@ module.exports = {
         const option = args[0]?.toLowerCase();
         const validModes = ['public', 'group', 'inbox', 'private'];
 
-        // ==========================================
-        // 📊 SHOW CURRENT MODE
-        // ==========================================
+        // Show current mode
         if (!option || !validModes.includes(option)) {
             const current = (await get('BOT_MODE', number)) || config.defaultMode;
 
@@ -45,35 +33,35 @@ module.exports = {
 
 📊 *Current:* *${current.toUpperCase()}*
 
-*Available Modes:*
-
+*Available:*
 🌐 *public* — Everyone
-   Groups + Inbox
-
-👥 *group* — Groups only
-   Ignore inbox messages
-
-📥 *inbox* — Inbox only
-   Ignore group messages
-
-🔒 *private* — Owner only
-   Ignore everyone else
+👥 *group* — Only groups
+📥 *inbox* — Only DM (inbox)
+🔒 *private* — Only owner
 
 *Usage:*
 • \`.mode public\`
 • \`.mode group\`
 • \`.mode inbox\`
-• \`.mode private\`
-
-💡 Only bot owner can change mode.${FOOTER}`);
+• \`.mode private\`${FOOTER}`);
         }
 
-        // ==========================================
-        // 💾 UPDATE MODE
-        // ==========================================
+        // Update mode directly (not via handleSettingUpdate)
         try {
-            await handleSettingUpdate('BOT_MODE', option, reply, number);
-            console.log(`[MODE] Changed to "${option}" by ${senderNumber}`);
+            await input('BOT_MODE', option, number);
+
+            await reply(`✅ *MODE UPDATED*
+
+📊 *New Mode:* *${option.toUpperCase()}*
+
+${option === 'public' ? '🌐 Everyone can use bot' : ''}
+${option === 'group' ? '👥 Only group messages' : ''}
+${option === 'inbox' ? '📥 Only DM (inbox) messages' : ''}
+${option === 'private' ? '🔒 Only owner' : ''}
+
+💡 *Verify:* Send a message in wrong place - bot should ignore.${FOOTER}`);
+
+            console.log(`[MODE] ✅ Changed to "${option}" by ${senderNumber}`);
         } catch (e) {
             console.error('[MODE] Error:', e.message);
             await reply(`❌ *Failed:* ${e.message}${FOOTER}`);
