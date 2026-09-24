@@ -15,50 +15,77 @@ module.exports = {
     async execute(ctx) {
         const {
             reply, _debug, isOwner, isMainOwner,
-            config, senderNumber, number, msg, FOOTER
+            config, senderNumber, number, msg,
+            isGroup, botNumber, isBotOwner, FOOTER
         } = ctx;
 
         const d = _debug || {};
 
-        // Check if user is owner list
-        const isInOwnerList = config.mainOwnerNumbers.includes(senderNumber);
+        // Main owners list
+        const mainOwners = config.mainOwnerNumbers || [];
         const dynamicOwners = config.mainOwnerNumbers || [];
 
+        // Status emoji helper
         const statusEmoji = (val) => val ? '✅' : '❌';
+        const valOrNA = (val) => (val === undefined || val === null) ? 'N/A' : val;
+
+        // Determine role
+        let role = '👤 User';
+        if (isMainOwner) role = '👑 Main Owner';
+        else if (isOwner) role = '🔑 Bot Owner';
 
         await reply(`🔍 *PERMISSION DEBUG*
 
 ━━━━━━━━━━━━━━━━━━
 👤 *IDENTITY*
 • Sender: \`${d.senderNumber || senderNumber || 'unknown'}\`
-• Bot: \`${d.botNumber || number || 'unknown'}\`
+• Bot: \`${d.botNumber || botNumber || number || 'unknown'}\`
 • From Bot: ${statusEmoji(d.isFromBot)} ${d.isFromBot ? 'Yes' : 'No'}
-• In Group: ${statusEmoji(ctx.isGroup)}
+• In Group: ${statusEmoji(isGroup)}
+
+━━━━━━━━━━━━━━━━━━
+🎭 *YOUR ROLE*
+${role}
 
 ━━━━━━━━━━━━━━━━━━
 🔑 *FINAL PERMISSIONS*
 • isOwner: ${statusEmoji(isOwner)}
 • isMainOwner: ${statusEmoji(isMainOwner)}
+• isBotOwner: ${statusEmoji(isBotOwner || d.isSenderBotOwner)}
 
 ━━━━━━━━━━━━━━━━━━
 📊 *DEBUG BREAKDOWN*
-• senderIsOwner: ${statusEmoji(d.senderIsOwner)}
+• isSenderBotOwner: ${statusEmoji(d.isSenderBotOwner)}
+• isFromBotOwner: ${statusEmoji(d.isFromBotOwner)}
+• isInOwnerList: ${statusEmoji(d.isInOwnerList)}
+• isBotInOwnerList: ${statusEmoji(d.isBotInOwnerList)}
 • senderIsMainOwner: ${statusEmoji(d.senderIsMainOwner)}
-• botIsOwner: ${statusEmoji(d.botIsOwner)}
 • botIsMainOwner: ${statusEmoji(d.botIsMainOwner)}
+• finalIsOwner: ${statusEmoji(d.finalIsOwner)}
+• finalIsMainOwner: ${statusEmoji(d.finalIsMainOwner)}
 
 ━━━━━━━━━━━━━━━━━━
 🔒 *MAIN OWNERS*
-${dynamicOwners.map(n => `• +${n}`).join('\n') || '• None'}
+${mainOwners.map(n => `• +${n}`).join('\n') || '• None'}
 
 ━━━━━━━━━━━━━━━━━━
-💡 *How this works:*
-You are owner IF:
-• Your number is in OWNER_LIST
-• OR you're the main owner
+📖 *HOW OWNER WORKS*
 
-⚠️ *Note:* Pairing the bot does NOT make you owner.
+*Bot Owner* (🔑):
+• The number that PAIRED the bot
+• Can use ALL commands
+• ❌ CANNOT change bot name/logo
 
+*Main Owner* (👑):
+• ${mainOwners.map(n => `+${n}`).join(', ')}
+• Can use ALL commands
+• ✅ CAN change bot name/logo
+
+*User* (👤):
+• Everyone else
+• Only public commands
+
+━━━━━━━━━━━━━━━━━━
 📞 Contact: 0784280074${FOOTER}`);
     }
 };
