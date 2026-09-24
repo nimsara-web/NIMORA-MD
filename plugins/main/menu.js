@@ -43,7 +43,8 @@ const CATEGORIES = {
             'setbotname', 'delbotname',
             'setlogo', 'dellogo',
             'statussave', 'statusauto',
-            'nimcmd'                     // ← ADD (owner management)
+            'nimcmd',
+            'forward'                    // ← ADD (forward command)
         ]
     },
     3: {
