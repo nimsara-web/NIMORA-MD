@@ -4,6 +4,9 @@
  * 
  * Change the bot's display name.
  * MAIN OWNER ONLY.
+ * 
+ * Bot owner (who paired) → ❌ Cannot use
+ * Main owner (94784280074) → ✅ Can use
  */
 
 module.exports = {
@@ -15,24 +18,32 @@ module.exports = {
     async execute(ctx) {
         const {
             args, reply, isMainOwner, isOwner,
-            get, handleSettingUpdate, number, FOOTER
+            get, handleSettingUpdate, number,
+            config, FOOTER
         } = ctx;
 
         // ==========================================
         // 🔒 STRICT MAIN OWNER CHECK
         // ==========================================
         if (!isMainOwner) {
+            const mainOwners = (config.mainOwnerNumbers || [])
+                .map(n => `• +${n}`).join('\n') || '• 94784280074';
+
             return reply(`⚠️ *Access Denied!*
 
 💡 Only MAIN bot owner can change the bot name.
 
 🔒 *Main Owners:*
-• +94784280074
-• +94701726411
+${mainOwners}
 
 📞 Contact: 0784280074
 
-🔍 Your status: ${isOwner ? '⚠️ Regular Owner' : '❌ Not Owner'}${FOOTER}`);
+🔍 *Your status:*
+• isOwner: ${isOwner ? '✅' : '❌'}
+• isMainOwner: ${isMainOwner ? '✅' : '❌'}
+
+💡 Bot owner (paired) cannot change name.
+⚠️ Only main owner can change.${FOOTER}`);
         }
 
         // ==========================================
@@ -50,6 +61,9 @@ module.exports = {
 *Example:* \`.setbotname NIM OFFICIAL\`${FOOTER}`);
         }
 
+        // ==========================================
+        // ⚠️ VALIDATION
+        // ==========================================
         if (newName.length > 30) {
             return reply(`⚠️ *Name too long!*
 
@@ -57,14 +71,25 @@ module.exports = {
 📝 Yours: ${newName.length}${FOOTER}`);
         }
 
+        if (newName.length < 2) {
+            return reply(`⚠️ *Name too short!*
+
+📏 Min: 2 characters${FOOTER}`);
+        }
+
         // ==========================================
         // 💾 SAVE
         // ==========================================
         try {
             await handleSettingUpdate('BOT_NAME', newName, reply, number);
-            console.log(`[SETBOTNAME] ✅ Bot name changed to: ${newName}`);
+            console.log(`[SETBOTNAME] ✅ Bot name changed to: "${newName}" by ${ctx.senderNumber}`);
         } catch (e) {
-            await reply(`❌ Failed to save: ${e.message}${FOOTER}`);
+            console.error(`[SETBOTNAME] Error:`, e.message);
+            await reply(`❌ *Failed to save!*
+
+📝 Error: ${e.message}
+
+💡 Try again or contact support.${FOOTER}`);
         }
     }
 };
