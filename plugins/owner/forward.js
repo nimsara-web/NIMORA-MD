@@ -13,7 +13,6 @@
  *   .forward 120363362308230584@newsletter  → Forward to channel
  *   .forward 123456789-123456@g.us   → Forward to group
  *   .forward mystatus                 → Forward to MY status
- *   .forward mystatus audio           → Forward audio to status
  * 
  * OWNER ONLY
  */
@@ -35,6 +34,18 @@ module.exports = {
             unwrapMessage, getMediaType,
             channelContext, FOOTER
         } = ctx;
+
+        // ==========================================
+        // 🔍 DEBUG LOG
+        // ==========================================
+        console.log(`\n[FORWARD] ═══════════════════════════`);
+        console.log(`[FORWARD] 🚀 Command triggered`);
+        console.log(`[FORWARD] Args:`, args);
+        console.log(`[FORWARD] Sender:`, sender);
+        console.log(`[FORWARD] SenderNumber:`, senderNumber);
+        console.log(`[FORWARD] BotNumber:`, number);
+        console.log(`[FORWARD] isOwner:`, isOwner, '| isMainOwner:', isMainOwner);
+        console.log(`[FORWARD] Has quoted:`, !!(msg.message?.extendedTextMessage?.contextInfo?.quotedMessage));
 
         // ==========================================
         // 🔒 OWNER CHECK
@@ -75,23 +86,39 @@ module.exports = {
         }
 
         // ==========================================
-        // 🎯 NORMALIZE TARGET
+        // 🎯 NORMALIZE TARGET (FIXED)
         // ==========================================
         let targetJid = target;
 
         const isStatusTarget = ['mystatus', 'status', 'story'].includes(target);
         const forceAudioStatus = args[1]?.toLowerCase() === 'audio';
 
-        // Handle number → JID
+        // Handle target → JID
         if (!isStatusTarget) {
-            if (/^[0-9]+$/.test(targetJid)) {
-                targetJid = `${targetJid}@s.whatsapp.net`;
+            // Already has @ (JID format)
+            if (targetJid.includes('@')) {
+                // Keep as-is (e.g., 120363...@newsletter, 123456@g.us)
+                console.log(`[FORWARD] JID format detected: ${targetJid}`);
             }
-            // Group/channel without suffix
+            // Pure number → user JID
+            else if (/^[0-9]+$/.test(targetJid)) {
+                targetJid = `${targetJid}@s.whatsapp.net`;
+                console.log(`[FORWARD] Number → JID: ${targetJid}`);
+            }
+            // Number with dashes → group JID
             else if (/^[0-9-]+$/.test(targetJid)) {
                 targetJid = `${targetJid}@g.us`;
+                console.log(`[FORWARD] Group → JID: ${targetJid}`);
             }
+            // Unknown format
+            else {
+                console.log(`[FORWARD] ⚠️ Unknown target format: ${targetJid}`);
+            }
+        } else {
+            console.log(`[FORWARD] Status target: ${target}`);
         }
+
+        console.log(`[FORWARD] Final targetJid: ${targetJid}`);
 
         // ==========================================
         // 📝 EXTRACT QUOTED CONTENT
@@ -108,6 +135,9 @@ module.exports = {
                            qMsg.videoMessage?.caption ||
                            qMsg.documentMessage?.caption ||
                            '';
+
+        console.log(`[FORWARD] MediaInfo:`, mediaInfo ? mediaInfo.type : 'text');
+        console.log(`[FORWARD] Text content:`, textContent.substring(0, 50));
 
         // ==========================================
         // 📊 TARGET INFO MESSAGE
@@ -128,33 +158,23 @@ module.exports = {
 
         try {
             // ==========================================
-            // 📸 STATUS TARGET (image/video/audio)
+            // 📸 STATUS TARGET
             // ==========================================
             if (isStatusTarget) {
+                // ... (status code - keep existing)
                 if (!mediaInfo) {
-                    return reply(`❌ *Status needs media!*
-
-💡 Reply to image/video/audio.${FOOTER}`);
+                    return reply(`❌ *Status needs media!*${FOOTER}`);
                 }
 
                 const { type, data } = mediaInfo;
                 const supportedStatusTypes = ['imageMessage', 'videoMessage', 'audioMessage'];
 
                 if (!supportedStatusTypes.includes(type)) {
-                    return reply(`❌ *Status only supports:*
-• Image
-• Video
-• Audio
-
-📁 Your type: ${type.replace('Message', '')}${FOOTER}`);
+                    return reply(`❌ *Status only supports Image/Video/Audio!*${FOOTER}`);
                 }
 
-                // ==========================================
-                // 🎵 AUDIO STATUS
-                // ==========================================
+                // Audio status
                 if (type === 'audioMessage' || forceAudioStatus) {
-                    console.log(`[FORWARD] 🎵 Downloading audio for status...`);
-
                     const buffer = await downloadMediaMessage(
                         {
                             key: {
@@ -165,13 +185,7 @@ module.exports = {
                             message: { [type]: data }
                         },
                         'buffer',
-                        {
-                            // 🎯 LARGE FILE SUPPORT
-                            options: {
-                                maxContentLength: Infinity,
-                                maxBodyLength: Infinity
-                            }
-                        },
+                        { options: { maxContentLength: Infinity, maxBodyLength: Infinity } },
                         { logger: pino({ level: 'silent' }) }
                     );
 
@@ -179,9 +193,6 @@ module.exports = {
                         return reply(`❌ *Failed to download audio!*${FOOTER}`);
                     }
 
-                    console.log(`[FORWARD] ✅ Audio downloaded: ${formatBytes(buffer.length)}`);
-
-                    // Send to status
                     await socket.sendMessage('status@broadcast', {
                         audio: buffer,
                         mimetype: data?.mimetype || 'audio/mpeg',
@@ -190,18 +201,10 @@ module.exports = {
                         statusJidList: [`${senderNumber}@s.whatsapp.net`]
                     });
 
-                    return reply(`✅ *Audio forwarded to MY STATUS!*
-
-🎵 *Type:* Audio
-📦 *Size:* ${formatBytes(buffer.length)}
-🕐 *Time:* ${new Date().toLocaleString()}${FOOTER}`);
+                    return reply(`✅ *Audio forwarded to MY STATUS!*${FOOTER}`);
                 }
 
-                // ==========================================
-                // 📸 IMAGE/VIDEO STATUS
-                // ==========================================
-                console.log(`[FORWARD] 📸 Downloading ${type} for status...`);
-
+                // Image/Video status
                 const buffer = await downloadMediaMessage(
                     {
                         key: {
@@ -212,21 +215,13 @@ module.exports = {
                         message: { [type]: data }
                     },
                     'buffer',
-                    {
-                        // 🎯 LARGE FILE SUPPORT
-                        options: {
-                            maxContentLength: Infinity,
-                            maxBodyLength: Infinity
-                        }
-                    },
+                    { options: { maxContentLength: Infinity, maxBodyLength: Infinity } },
                     { logger: pino({ level: 'silent' }) }
                 );
 
                 if (!buffer || buffer.length === 0) {
                     return reply(`❌ *Failed to download media!*${FOOTER}`);
                 }
-
-                console.log(`[FORWARD] ✅ Downloaded: ${formatBytes(buffer.length)}`);
 
                 const caption = data?.caption || '';
 
@@ -244,15 +239,11 @@ module.exports = {
                     }, { statusJidList: [`${senderNumber}@s.whatsapp.net`] });
                 }
 
-                return reply(`✅ *Forwarded to MY STATUS!*
-
-📸 *Type:* ${type.replace('Message', '')}
-📦 *Size:* ${formatBytes(buffer.length)}
-🕐 *Time:* ${new Date().toLocaleString()}${FOOTER}`);
+                return reply(`✅ *Forwarded to MY STATUS!*${FOOTER}`);
             }
 
             // ==========================================
-            // 📱 NORMAL TARGET (number/group/channel)
+            // 📱 NORMAL TARGET
             // ==========================================
             // TEXT MESSAGE
             if (!mediaInfo) {
@@ -260,22 +251,25 @@ module.exports = {
                     return reply(`❌ *Could not read text!*${FOOTER}`);
                 }
 
-                await socket.sendMessage(targetJid, {
+                console.log(`[FORWARD] 📤 Sending TEXT to: ${targetJid}`);
+
+                const sent = await socket.sendMessage(targetJid, {
                     text: `📤 *FORWARDED*
 
 ${textContent}${FOOTER}`,
                     contextInfo: channelContext
                 });
 
+                console.log(`[FORWARD] ✅ Send result:`, sent?.key?.id || 'NO ID');
+
                 return reply(`✅ *Forwarded!*
 
 🎯 *To:* ${targetJid}
-💬 *Type:* Text${FOOTER}`);
+💬 *Type:* Text
+🆔 *ID:* ${sent?.key?.id || 'unknown'}${FOOTER}`);
             }
 
-            // ==========================================
-            // 📁 MEDIA MESSAGE (LARGE FILE SUPPORT)
-            // ==========================================
+            // MEDIA MESSAGE
             const { type, data } = mediaInfo;
 
             console.log(`[FORWARD] 📥 Downloading ${type}...`);
@@ -290,13 +284,7 @@ ${textContent}${FOOTER}`,
                     message: { [type]: data }
                 },
                 'buffer',
-                {
-                    // 🎯 LARGE FILE SUPPORT (Infinity = no limit)
-                    options: {
-                        maxContentLength: Infinity,
-                        maxBodyLength: Infinity
-                    }
-                },
+                { options: { maxContentLength: Infinity, maxBodyLength: Infinity } },
                 { logger: pino({ level: 'silent' }) }
             );
 
@@ -311,28 +299,34 @@ ${textContent}${FOOTER}`,
             // ==========================================
             // 📤 SEND BASED ON TYPE
             // ==========================================
+            let sent;
+
             if (type === 'imageMessage') {
-                await socket.sendMessage(targetJid, {
+                console.log(`[FORWARD] 📤 Sending IMAGE to: ${targetJid}`);
+                sent = await socket.sendMessage(targetJid, {
                     image: buffer,
                     caption,
                     contextInfo: channelContext
                 });
             } else if (type === 'videoMessage') {
-                await socket.sendMessage(targetJid, {
+                console.log(`[FORWARD] 📤 Sending VIDEO to: ${targetJid}`);
+                sent = await socket.sendMessage(targetJid, {
                     video: buffer,
                     caption,
                     mimetype: data?.mimetype || 'video/mp4',
                     contextInfo: channelContext
                 });
             } else if (type === 'audioMessage') {
-                await socket.sendMessage(targetJid, {
+                console.log(`[FORWARD] 📤 Sending AUDIO to: ${targetJid}`);
+                sent = await socket.sendMessage(targetJid, {
                     audio: buffer,
                     mimetype: data?.mimetype || 'audio/mpeg',
                     ptt: data?.ptt || false,
                     contextInfo: channelContext
                 });
             } else if (type === 'documentMessage') {
-                await socket.sendMessage(targetJid, {
+                console.log(`[FORWARD] 📤 Sending DOCUMENT to: ${targetJid}`);
+                sent = await socket.sendMessage(targetJid, {
                     document: buffer,
                     mimetype: data?.mimetype || 'application/octet-stream',
                     fileName: data?.fileName || 'document',
@@ -340,7 +334,8 @@ ${textContent}${FOOTER}`,
                     contextInfo: channelContext
                 });
             } else if (type === 'stickerMessage') {
-                await socket.sendMessage(targetJid, {
+                console.log(`[FORWARD] 📤 Sending STICKER to: ${targetJid}`);
+                sent = await socket.sendMessage(targetJid, {
                     sticker: buffer,
                     contextInfo: channelContext
                 });
@@ -348,20 +343,23 @@ ${textContent}${FOOTER}`,
                 return reply(`❌ *Unsupported media type: ${type}*${FOOTER}`);
             }
 
+            console.log(`[FORWARD] ✅ Send result:`, sent?.key?.id || 'NO ID');
+
             await reply(`✅ *Forwarded!*
 
 🎯 *To:* ${targetJid}
 💬 *Type:* ${type.replace('Message', '')}
-📦 *Size:* ${formatBytes(buffer.length)}${FOOTER}`);
+📦 *Size:* ${formatBytes(buffer.length)}
+🆔 *ID:* ${sent?.key?.id || 'unknown'}${FOOTER}`);
 
-            console.log(`[FORWARD] ✅ ${type} (${formatBytes(buffer.length)}) → ${targetJid} by ${senderNumber}`);
+            console.log(`[FORWARD] ═══════════════════════════\n`);
 
         } catch (err) {
             console.error(`[FORWARD] ❌ Error:`, err);
+            console.error(`[FORWARD] ❌ Stack:`, err.stack);
 
             let errMsg = err.message || 'Unknown error';
 
-            // Helpful error messages
             if (errMsg.includes('not-authorized') || errMsg.includes('forbidden')) {
                 errMsg = 'Bot is not a member of target chat';
             } else if (errMsg.includes('bad-request') || errMsg.includes('invalid')) {
@@ -390,7 +388,7 @@ ${textContent}${FOOTER}`,
 };
 
 // ==========================================
-// 🔧 HELPER: Format bytes to readable
+// 🔧 HELPER: Format bytes
 // ==========================================
 function formatBytes(bytes, decimals = 2) {
     if (!bytes || bytes === 0) return '0 Bytes';
