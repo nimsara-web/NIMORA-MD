@@ -30,7 +30,6 @@ const { loadPlugins, getCommand, getAllCommands, getCategories } = require('./pl
 // ==========================================
 // 🔧 NODE.JS CONFIG
 // ==========================================
-// Increase max listeners to avoid warnings
 require('events').EventEmitter.defaultMaxListeners = 50;
 
 // ==========================================
@@ -518,23 +517,35 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
         const ctx = buildContext(socket, msg, number, body, reply);
 
         // ==========================================
-        // 🔒 BOT MODE CHECK
+        // 🔒 BOT MODE CHECK (DEBUG LOGS)
         // ==========================================
         const mode = (await get('BOT_MODE', number)) || config.defaultMode;
 
+        console.log(`[MODE] mode=${mode} | isGroup=${ctx.isGroup} | sender=${ctx.senderNumber} | isOwner=${ctx.isOwner} | isMainOwner=${ctx.isMainOwner}`);
+
+        // Only check for non-owners
         if (!ctx.isOwner && !ctx.isMainOwner) {
+            // private → only owner
             if (mode === 'private') {
-                console.log(`[MODE] Private: ignored ${ctx.senderNumber}`);
+                console.log(`[MODE] ❌ Ignored (private)`);
                 return;
             }
+
+            // group → only group messages
             if (mode === 'group' && !ctx.isGroup) {
-                console.log(`[MODE] Group-only: ignored inbox from ${ctx.senderNumber}`);
+                console.log(`[MODE] ❌ Ignored (group-only)`);
                 return;
             }
+
+            // inbox → only inbox (DM) messages
             if (mode === 'inbox' && ctx.isGroup) {
-                console.log(`[MODE] Inbox-only: ignored group message from ${ctx.senderNumber}`);
+                console.log(`[MODE] ❌ Ignored (inbox-only)`);
                 return;
             }
+
+            console.log(`[MODE] ✅ Allowed (${mode})`);
+        } else {
+            console.log(`[MODE] ✅ Owner bypass`);
         }
 
         // Paid check
@@ -681,9 +692,6 @@ async function StartBot(number, res = null, isRestore = false) {
         const { state, saveCreds } = await useMongoDBAuthState(sanitized);
         const logger = pino({ level: 'silent' });
 
-        // ==========================================
-        // 🎯 LARGE FILE SUPPORT
-        // ==========================================
         const sock = makeWASocket({
             auth: {
                 creds: state.creds,
@@ -695,18 +703,14 @@ async function StartBot(number, res = null, isRestore = false) {
             keepAliveIntervalMs: 30000,
             connectTimeoutMs: 60000,
 
-            // ==========================================
-            // 🎯 LARGE FILE CONFIG
-            // ==========================================
-            defaultQueryTimeoutMs: 120000,      // 2 minutes timeout
-            retryRequestDelayMs: 500,            // Retry delay
-            maxMsgRetryCount: 5,                 // Max retries
+            defaultQueryTimeoutMs: 120000,
+            retryRequestDelayMs: 500,
+            maxMsgRetryCount: 5,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
             markOnlineOnConnect: false,
             fireInitQueries: false,
 
-            // Media upload/download limits
             options: {
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity
