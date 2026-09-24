@@ -1,5 +1,5 @@
 /**
- * NIMORA MD - Delete/Reset Bot Logo
+ * NIMORA MD - Reset Bot Logo
  * Category: owner
  * 
  * Reset bot logo to default.
@@ -16,15 +16,23 @@ module.exports = {
 
     async execute(ctx) {
         const {
-            args, reply, isMainOwner,
+            args, reply, isMainOwner, isOwner,
             input, number, FOOTER
         } = ctx;
 
-        // 🔒 MAIN OWNER ONLY
+        // ==========================================
+        // 🔒 STRICT MAIN OWNER CHECK
+        // ==========================================
         if (!isMainOwner) {
+            const mainOwners = (config.mainOwnerNumbers || [])
+                .map(n => `• +${n}`).join('\n') || '• 94784280074';
+
             return reply(`⚠️ *Access Denied!*
 
-💡 Only MAIN bot owner can reset bot logo.
+💡 Only MAIN bot owner can reset the bot logo.
+
+🔒 *Main Owners:*
+${mainOwners}
 
 📞 Contact: 0784280074${FOOTER}`);
         }
@@ -43,8 +51,11 @@ module.exports = {
             await reply(`✅ *Bot logo reset to default!*
 
 🖼️ ${config.botImageUrl}${FOOTER}`);
+
+            console.log(`[DELLOGO] ✅ Logo reset by ${ctx.senderNumber}`);
         } catch (e) {
-            await reply(`❌ Failed: ${e.message}${FOOTER}`);
+            console.error(`[DELLOGO] Error:`, e.message);
+            await reply(`❌ *Failed:* ${e.message}${FOOTER}`);
         }
     }
 };
