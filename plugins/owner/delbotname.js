@@ -3,7 +3,7 @@
  * Category: owner
  * 
  * Reset bot name to default (NIM OFFICIAL).
- * MAIN OWNER ONLY — regular owners cannot change bot name.
+ * MAIN OWNER ONLY.
  */
 
 const config = require('../../config');
@@ -12,7 +12,7 @@ module.exports = {
     name: 'delbotname',
     aliases: ['resetbotname', 'resetname', 'delname'],
     category: 'owner',
-    description: 'Reset bot name to default (main owner only)',
+    description: 'Reset bot name (main owner only)',
 
     async execute(ctx) {
         const {
@@ -23,21 +23,22 @@ module.exports = {
         // ==========================================
         // 🔒 STRICT MAIN OWNER CHECK
         // ==========================================
-        // Only MAIN owners can reset bot name
-        // Regular owners (dynamic owner list) CANNOT
-        // Users who paired bot CANNOT
         if (!isMainOwner) {
+            const mainOwners = (config.mainOwnerNumbers || [])
+                .map(n => `• +${n}`).join('\n') || '• 94784280074';
+
             return reply(`⚠️ *Access Denied!*
 
 💡 Only MAIN bot owner can reset the bot name.
 
 🔒 *Main Owners:*
-• +94784280074
-• +94701726411
+${mainOwners}
 
 📞 Contact: 0784280074
 
-🔍 Your status: ${isOwner ? '⚠️ Regular Owner' : '❌ Not Owner'}${FOOTER}`);
+🔍 *Your status:*
+• isOwner: ${isOwner ? '✅' : '❌'}
+• isMainOwner: ${isMainOwner ? '✅' : '❌'}${FOOTER}`);
         }
 
         const currentName = await get('BOT_NAME', number) || config.botName;
@@ -67,9 +68,10 @@ module.exports = {
 
 💡 Bot will use default name from now on.${FOOTER}`);
 
-            console.log(`[DELBOTNAME] ✅ Bot name reset by main owner`);
+            console.log(`[DELBOTNAME] ✅ Bot name reset by ${ctx.senderNumber}`);
         } catch (e) {
-            await reply(`❌ Failed: ${e.message}${FOOTER}`);
+            console.error(`[DELBOTNAME] Error:`, e.message);
+            await reply(`❌ *Failed:* ${e.message}${FOOTER}`);
         }
     }
 };
