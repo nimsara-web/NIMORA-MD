@@ -41,6 +41,7 @@ const CATEGORIES = {
             'setup', 'tgauth', 'tgconfig',
             'vvsave', 'vvsaveauto', 'save',
             'setbotname', 'delbotname',
+            'setlogo', 'dellogo',           // ← ADD
             'statussave', 'statusauto'
         ]
     },
@@ -52,7 +53,8 @@ const CATEGORIES = {
             'dictionary', 'readmore', 'device', 'newgroup', 'delgroup',
             'savemedia', 'block', 'unblock', 'help', 'id', 'settings', 'apply',
             'defaultimg', 'defaultfooter', 'list', 'menu', 'alive', 'jid',
-            'system', 'ping', 'whoami', 'nodelet', 'remsg'
+            'system', 'ping', 'whoami', 'nodelet', 'remsg',
+            'ewanna'                         // ← ADD
         ]
     },
     4: {
