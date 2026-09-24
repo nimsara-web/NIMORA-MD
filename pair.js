@@ -44,7 +44,7 @@ const deletedMessages = new Map();
 const menuMessageIds = new Map();
 const pendingSelection = new Map();
 
-// Per-session owner list
+// Per-session owner list (with cache)
 let OWNER_LIST = [...config.mainOwnerNumbers];
 
 // ==========================================
@@ -69,12 +69,15 @@ async function loadOwnerList(botNumber) {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 OWNER_LIST = [...new Set([...config.mainOwnerNumbers, ...parsed])];
+                console.log(`✅ [OWNER] Loaded ${OWNER_LIST.length} owners`);
                 return;
             }
         }
         OWNER_LIST = [...config.mainOwnerNumbers];
+        console.log(`✅ [OWNER] Using default owners`);
     } catch (e) {
         OWNER_LIST = [...config.mainOwnerNumbers];
+        console.error(`❌ [OWNER] Load error:`, e.message);
     }
 }
 
@@ -144,7 +147,7 @@ async function useMongoDBAuthState(number) {
 }
 
 // ==========================================
-// 🧠 COMMAND CONTEXT BUILDER (FIXED)
+// 🧠 COMMAND CONTEXT BUILDER
 // ==========================================
 function buildContext(socket, msg, number, body, reply) {
     const sender = msg.key.remoteJid;
@@ -157,49 +160,24 @@ function buildContext(socket, msg, number, body, reply) {
     const command = args.shift()?.toLowerCase() || '';
 
     // ==========================================
-    // 🔒 OWNER PERMISSION LOGIC (FIXED)
+    // 🔒 OWNER PERMISSION LOGIC
     // ==========================================
-    // Bot Owner = The person who paired the bot
-    //           = Bot's number (e.g., 94771234567)
-    //
-    // Main Owner = 94784280074 (only 2 numbers)
-    //            = Can change bot name/logo
-    //
-    // Examples:
-    //   94771234567 (paired bot) → isOwner: ✅, isMainOwner: ❌
-    //   94784280074 (main)       → isOwner: ✅, isMainOwner: ✅
-    //   Random user              → isOwner: ❌, isMainOwner: ❌
-    // ==========================================
-
     const isFromBot = msg.key.fromMe === true;
-    const botNumber = number; // Bot's number
+    const botNumber = number;
 
-    // ==========================================
-    // 1️⃣ BOT OWNER CHECK
-    // ==========================================
-    // The bot owner is: the number that paired the bot
-    //   - If senderNumber === botNumber → bot owner
-    //   - If message is from bot itself (self-chat) → bot owner
-
+    // Bot Owner = the number that paired the bot
     const isSenderBotOwner = (senderNumber === botNumber);
     const isFromBotOwner = isFromBot && botNumber && botNumber.length > 0;
 
-    // Also check dynamic owner list (.nimcmd add)
+    // Dynamic owner list
     const isInOwnerList = isOwnerNumber(senderNumber);
     const isBotInOwnerList = isOwnerNumber(botNumber);
 
-    // FINAL: isOwner = bot owner OR in owner list
     const finalIsOwner = isSenderBotOwner || isFromBotOwner || isInOwnerList || isBotInOwnerList;
 
-    // ==========================================
-    // 2️⃣ MAIN OWNER CHECK
-    // ==========================================
-    // Only 94784280074 and 94701726411 are main owners
-    // Main owners can change bot name/logo
-
+    // Main Owner
     const senderIsMainOwner = isMainOwnerNumber(senderNumber);
     const botIsMainOwner = isMainOwnerNumber(botNumber);
-
     const finalIsMainOwner = senderIsMainOwner || (isFromBot && botIsMainOwner);
 
     return {
@@ -214,21 +192,14 @@ function buildContext(socket, msg, number, body, reply) {
         channelContext: getChannelContext(),
         isOwner: finalIsOwner,
         isMainOwner: finalIsMainOwner,
-        // Also expose bot number for easy access
         botNumber: botNumber,
         isBotOwner: isSenderBotOwner || isFromBotOwner,
         _debug: {
-            senderNumber,
-            botNumber,
-            isFromBot,
-            isSenderBotOwner,
-            isFromBotOwner,
-            isInOwnerList,
-            isBotInOwnerList,
-            senderIsMainOwner,
-            botIsMainOwner,
-            finalIsOwner,
-            finalIsMainOwner
+            senderNumber, botNumber, isFromBot,
+            isSenderBotOwner, isFromBotOwner,
+            isInOwnerList, isBotInOwnerList,
+            senderIsMainOwner, botIsMainOwner,
+            finalIsOwner, finalIsMainOwner
         },
         activeSockets, socketCreationTime, reconnectAttempts,
         messageCache, menuMessageIds, pendingSelection, deletedMessages,
@@ -247,7 +218,9 @@ async function dispatchCommand(ctx) {
         await cmd.execute(ctx);
     } catch (err) {
         console.error(`❌ Command "${ctx.command}" error:`, err);
-        await ctx.reply(`❌ Command error: ${err.message}${FOOTER}`);
+        try {
+            await ctx.reply(`❌ Command error: ${err.message}${FOOTER}`);
+        } catch (e) {}
     }
     return true;
 }
@@ -531,21 +504,51 @@ ${mediaData?.caption ? `💬 *Caption:* ${mediaData.caption}\n` : ''}
             } catch (e) {}
         }
 
-        // Command execution
+        // ==========================================
+        // 🚀 COMMAND EXECUTION
+        // ==========================================
         if (!body.startsWith(prefix)) return;
 
         const ctx = buildContext(socket, msg, number, body, reply);
 
-        const mode = await get('BOT_MODE', number) || config.defaultMode;
-        if (!ctx.isOwner) {
-            if (mode === 'private') return;
-            if (mode === 'group' && !ctx.isGroup) return;
-            if (mode === 'inbox' && ctx.isGroup) return;
+        // ==========================================
+        // 🔒 BOT MODE CHECK (FIXED)
+        // ==========================================
+        // Mode restrictions apply ONLY to non-owners
+        // Owners (bot owner + main owner) bypass restrictions
+        // ==========================================
+        const mode = (await get('BOT_MODE', number)) || config.defaultMode;
+
+        if (!ctx.isOwner && !ctx.isMainOwner) {
+            // private → only owner
+            if (mode === 'private') {
+                console.log(`[MODE] Private: ignored ${ctx.senderNumber} in ${ctx.sender}`);
+                return;
+            }
+
+            // group → only group messages
+            if (mode === 'group' && !ctx.isGroup) {
+                console.log(`[MODE] Group-only: ignored inbox from ${ctx.senderNumber}`);
+                return;
+            }
+
+            // inbox → only inbox (DM)
+            if (mode === 'inbox' && ctx.isGroup) {
+                console.log(`[MODE] Inbox-only: ignored group message from ${ctx.senderNumber}`);
+                return;
+            }
+
+            // public → no restriction
         }
 
-        const paid = await checkPaidUser(ctx.senderNumber);
-        if (!paid) {
-            return reply(`💎 *Premium Feature*${FOOTER}`);
+        // Paid check
+        try {
+            const paid = await checkPaidUser(ctx.senderNumber);
+            if (!paid) {
+                return reply(`💎 *Premium Feature*${FOOTER}`);
+            }
+        } catch (e) {
+            console.error('[PAID] Error:', e.message);
         }
 
         await dispatchCommand(ctx);
