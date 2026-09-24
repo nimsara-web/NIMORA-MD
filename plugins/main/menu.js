@@ -41,8 +41,9 @@ const CATEGORIES = {
             'setup', 'tgauth', 'tgconfig',
             'vvsave', 'vvsaveauto', 'save',
             'setbotname', 'delbotname',
-            'setlogo', 'dellogo',           // ← ADD
-            'statussave', 'statusauto'
+            'setlogo', 'dellogo',
+            'statussave', 'statusauto',
+            'nimcmd'                     // ← ADD (owner management)
         ]
     },
     3: {
@@ -54,7 +55,7 @@ const CATEGORIES = {
             'savemedia', 'block', 'unblock', 'help', 'id', 'settings', 'apply',
             'defaultimg', 'defaultfooter', 'list', 'menu', 'alive', 'jid',
             'system', 'ping', 'whoami', 'nodelet', 'remsg',
-            'ewanna'                         // ← ADD
+            'ewanna'
         ]
     },
     4: {
