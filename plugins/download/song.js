@@ -1,13 +1,21 @@
+/**
+ * NIMORA MD - YouTube Song Downloader
+ * Uses @distube/ytdl-core + yt-search (100% npm, no API)
+ */
+
+const ytdl = require('@distube/ytdl-core');
 const yts = require('yt-search');
-const axios = require('axios');
-const config = require('../../config');
-const { nimFetch, extractUrl } = require('./_helper');
+const fs = require('fs-extra');
+const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 module.exports = {
     name: 'song',
-    aliases: ['music'],
+    aliases: ['music', 'ytaudio'],
     category: 'download',
-    description: 'Download YouTube song (audio/video)',
+    description: 'Download YouTube song (npm only)',
 
     async execute(ctx) {
         const { args, reply, socket, msg, sender, pendingSelection, channelContext, FOOTER } = ctx;
@@ -22,7 +30,6 @@ module.exports = {
             const video = search.videos[0];
             if (!video) return reply(`❌ Song not found!${FOOTER}`);
 
-            // Set pending selection
             pendingSelection.set(sender, {
                 type: 'song',
                 url: video.url,
@@ -61,33 +68,80 @@ async function handleDownload(choice, video, socket, sender, msg, reply, channel
         if (choice === 1) {
             await reply(`📥 Downloading audio... ⏳${FOOTER}`);
 
-            const data = await nimFetch('/api/ytmp3', { url: video.url });
-            const audioUrl = extractUrl(data, ['result.url', 'data.url', 'url']);
+            // Download audio stream
+            const audioStream = ytdl(video.url, {
+                filter: 'audioonly',
+                quality: 'highestaudio',
+                highWaterMark: 1 << 25
+            });
 
-            if (!audioUrl) return reply(`❌ Audio download failed!${FOOTER}`);
+            // Save to temp
+            const tmpDir = path.join(__dirname, '../../tmp');
+            await fs.ensureDir(tmpDir);
+
+            const audioPath = path.join(tmpDir, `audio_${Date.now()}.mp3`);
+
+            // Convert with ffmpeg
+            const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+
+            await new Promise((resolve, reject) => {
+                const ffmpeg = require('fluent-ffmpeg');
+                ffmpeg.setFfmpegPath(ffmpegPath);
+
+                ffmpeg(audioStream)
+                    .audioBitrate(128)
+                    .audioCodec('libmp3lame')
+                    .format('mp3')
+                    .save(audioPath)
+                    .on('end', resolve)
+                    .on('error', reject);
+            });
+
+            const buffer = await fs.readFile(audioPath);
 
             await socket.sendMessage(sender, {
-                audio: { url: audioUrl },
+                audio: buffer,
                 mimetype: 'audio/mpeg',
                 fileName: `${video.title}.mp3`,
                 contextInfo: channelContext
             }, { quoted: msg });
 
+            await fs.remove(audioPath).catch(() => {});
+
         } else if (choice === 2) {
-            await reply(`📥 Downloading video... ⏳${FOOTER}`);
+            await reply(`📥 Downloading video... ⏳ (may take 1-2 min)${FOOTER}`);
 
-            const data = await nimFetch('/api/ytmp4-v2', { url: video.url });
-            const videoUrl = extractUrl(data, ['result.url', 'data.url', 'url', 'result.download_url']);
+            // Download video
+            const tmpDir = path.join(__dirname, '../../tmp');
+            await fs.ensureDir(tmpDir);
 
-            if (!videoUrl) return reply(`❌ Video download failed!${FOOTER}`);
+            const videoPath = path.join(tmpDir, `video_${Date.now()}.mp4`);
+
+            await new Promise((resolve, reject) => {
+                const writeStream = fs.createWriteStream(videoPath);
+                const videoStream = ytdl(video.url, {
+                    quality: 'highest',
+                    filter: 'audioandvideo'
+                });
+
+                videoStream.pipe(writeStream);
+                writeStream.on('finish', resolve);
+                writeStream.on('error', reject);
+                videoStream.on('error', reject);
+            });
+
+            const buffer = await fs.readFile(videoPath);
 
             await socket.sendMessage(sender, {
-                video: { url: videoUrl },
+                video: buffer,
                 caption: `🎬 *${video.title}*${FOOTER}`,
                 contextInfo: channelContext
             }, { quoted: msg });
+
+            await fs.remove(videoPath).catch(() => {});
         }
     } catch (e) {
-        await reply(`❌ Error: ${e.message}${FOOTER}`);
+        console.error('[SONG] Error:', e.message);
+        await reply(`❌ Download failed: ${e.message}${FOOTER}`);
     }
 }
